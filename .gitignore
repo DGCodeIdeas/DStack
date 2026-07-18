@@ -1,0 +1,180 @@
+# Environment files (secrets)
+.env
+.env.local
+.env.*.local
+server/.env
+cloud/config.env
+cloud/.env
+
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+.tox/
+.mypy_cache/
+.pytype/
+
+# Python virtual environments
+venv/
+env/
+.venv/
+ENV/
+
+# Logs
+*.log
+devstack.log
+logs/
+server/logs/
+*.log.*
+
+# Backups and dumps
+backups/
+backups_*/
+*.sql
+*.sql.gz
+*.tar.gz
+*.bak
+*.backup
+*.dump
+db_dumps/
+db_dumps_*/
+
+# Generated SSL certificates and keys
+docker/ssl/
+docker/ssl/*
+docker/vhosts/*.conf
+docker/vhosts/*.conf.bak
+!docker/vhosts/.gitkeep
+!docker/vhosts/*.conf.example
+!docker/vhosts/*.conf.example
+
+# Docker generated
+docker/data/
+docker/mysql-data/
+docker/redis-data/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Node.js (if any frontend build)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+*.egg/
+
+# Coverage reports
+htmlcov/
+.coverage
+coverage.xml
+
+# Test artifacts
+.testrepository/
+test-results/
+*.prof
+
+# Database files
+*.sqlite
+*.sqlite3
+*.db
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# IDE/Editor specific
+*.swp
+*.swo
+*~
+.vscode/*
+!.vscode/extensions.json
+.idea/*
+!.idea/runConfigurations/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs (additional)
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# Docker volumes (data)
+volumes/
+data/
+
+# IDE specific
+*.sublime-workspace
+*.sublime-project
+
+# Python specific
+*.egg
+*.egg-info/
+dist/
+build/
+*.manifest
+*.spec
+
+# Testing
+.tox/
+.nox/
+.hypothesis/
+
+# Documentation builds
+docs/_build/
+site/
+
+# Cloud/Deployment
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# IDE/Editor
+.vscode/settings.json
+.vscode/launch.json
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/usage.statistics.xml
+.idea/dictionaries/
+.idea/shelf/

@@ -1,0 +1,128 @@
+# DevStack Manager - Docker Compose
+# Defines the local development stack: nginx, php, mysql, phpmyadmin, redis.
+
+services:
+  # ---------------------------------------------------------------
+  # Nginx reverse proxy / web server
+  # ---------------------------------------------------------------
+  nginx:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.nginx
+    container_name: ${COMPOSE_PROJECT_NAME:-devstack}-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+      - "443:443"
+    depends_on:
+      php:
+        condition: service_started
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/vhosts:/etc/nginx/vhosts:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - ./projects:/var/www/projects:ro
+    networks:
+      - devstack-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # PHP-FPM application runtime
+  # ---------------------------------------------------------------
+  php:
+    build:
+      context: ./docker
+      dockerfile: Dockerfile.php
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.2}
+    container_name: ${COMPOSE_PROJECT_NAME:-devstack}-php
+    working_dir: /var/www
+    volumes:
+      - ./projects:/var/www/projects
+      - ./docker/php.ini:/usr/local/etc/php/conf.d/devstack.ini:ro
+      # Allow the PHP service to manage Docker (used by the devstack manager)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - devstack-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # MySQL database
+  # ---------------------------------------------------------------
+  mysql:
+    image: mysql:8.0
+    container_name: ${COMPOSE_PROJECT_NAME:-devstack}-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+      MYSQL_USER: ${DB_USER}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql.cnf:/etc/mysql/conf.d/mysql.cnf:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-u", "root", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - devstack-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # phpMyAdmin
+  # ---------------------------------------------------------------
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:latest
+    container_name: ${COMPOSE_PROJECT_NAME:-devstack}-phpmyadmin
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      PMA_HOST: mysql
+      PMA_PORT: 3306
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${PHPMYADMIN_PORT:-8080}:80"
+    networks:
+      - devstack-net
+    restart: unless-stopped
+
+  # ---------------------------------------------------------------
+  # Redis cache
+  # ---------------------------------------------------------------
+  redis:
+    image: redis:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-devstack}-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    networks:
+      - devstack-net
+    restart: unless-stopped
+
+# ---------------------------------------------------------------
+# Named volumes
+# ---------------------------------------------------------------
+volumes:
+  mysql-data:
+  redis-data:
+
+# ---------------------------------------------------------------
+# Custom bridge network
+# ---------------------------------------------------------------
+networks:
+  devstack-net:
+    driver: bridge
