@@ -12,7 +12,8 @@ interactive_timeout = 28800
 
 # InnoDB tuning (reasonable default for dev workloads)
 innodb_buffer_pool_size = 256M
-innodb_log_file_size = 64M
+# Use modern innodb_redo_log_capacity instead of deprecated innodb_log_file_size
+innodb_redo_log_capacity = 128M
 innodb_flush_log_at_trx_commit = 2
 innodb_flush_method = O_DIRECT
 

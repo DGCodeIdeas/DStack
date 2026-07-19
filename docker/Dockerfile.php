@@ -40,7 +40,7 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 
 # Apply custom PHP configuration
-COPY php.ini /usr/local/etc/php/conf.d/devstack.ini
+COPY docker/php.ini /usr/local/etc/php/conf.d/devstack.ini
 
 # Run as the default www-data user
 USER www-data
