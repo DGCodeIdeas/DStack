@@ -118,6 +118,50 @@ systemctl enable docker
 systemctl start docker
 
 # -----------------------------------------------------------------------------
+# Configure Docker daemon (DNS + log rotation) BEFORE any docker build/pull.
+# Ubuntu's systemd-resolved stub (127.0.0.53) is unreachable inside containers,
+# so builds that need DNS (composer, pecl) fail without this.
+# -----------------------------------------------------------------------------
+log "Configuring Docker daemon (DNS + log rotation)..."
+cat > /etc/docker/daemon.json <<'EOF'
+{
+  "dns": ["8.8.8.8", "8.8.4.4"],
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+EOF
+systemctl restart docker
+log "Docker daemon reconfigured."
+
+log "Fixing /etc/resolv.conf for Docker build DNS..."
+ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+
+# -----------------------------------------------------------------------------
+# Add 2 GB swap. t3.small has 2 GB RAM; imagick's PECL build compiles from
+# source and the OOM killer kills the build without swap headroom.
+# -----------------------------------------------------------------------------
+if [[ ! -f /swapfile ]]; then
+    log "Creating 2 GB swapfile..."
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    log "Swap enabled: $(free -h | grep Swap)"
+fi
+
+# -----------------------------------------------------------------------------
+# Release port 80 in case a bare-metal web server is present on the AMI.
+# -----------------------------------------------------------------------------
+log "Ensuring port 80 is free..."
+systemctl stop apache2 2>/dev/null && systemctl disable apache2 2>/dev/null || true
+systemctl stop nginx   2>/dev/null && systemctl disable nginx   2>/dev/null || true
+log "Port 80 cleared."
+
+# -----------------------------------------------------------------------------
 # Install Certbot (for Let's Encrypt)
 # -----------------------------------------------------------------------------
 log "Installing Certbot..."
@@ -199,6 +243,10 @@ ${COMPOSE_EXTRA_ENV}
 EOF
 
 log ".env file created at ${REPO_DIR}/.env"
+
+# Compose resolves .env relative to its own directory (docker/), not repo root.
+cp "${REPO_DIR}/.env" "${REPO_DIR}/docker/.env"
+log ".env synced to ${REPO_DIR}/docker/.env"
 
 # -----------------------------------------------------------------------------
 # Create docker-compose.override.yml for production SSL if domain configured
@@ -283,21 +331,6 @@ else
     warn "DOMAIN or EMAIL_FOR_LETSENCRYPT not set - skipping Let's Encrypt setup"
     warn "To enable HTTPS later, set DOMAIN and EMAIL_FOR_LETSENCRYPT in config.env and re-run bootstrap"
 fi
-
-# -----------------------------------------------------------------------------
-# Set up log rotation for Docker containers
-# -----------------------------------------------------------------------------
-log "Configuring Docker log rotation..."
-cat > /etc/docker/daemon.json <<'EOF'
-{
-  "log-driver": "json-file",
-  "log-opts": {
-    "max-size": "10m",
-    "max-file": "3"
-  }
-}
-EOF
-systemctl restart docker
 
 # -----------------------------------------------------------------------------
 # Final status and URLs

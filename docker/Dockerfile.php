@@ -45,7 +45,8 @@ COPY --from=composer:latest /usr/bin/composer /usr/bin/composer
 WORKDIR /var/www
 
 # Apply custom PHP configuration
-COPY docker/php.ini /usr/local/etc/php/conf.d/devstack.ini
+# Build context is docker/ (see docker-compose.yml), so this path is relative to that
+COPY php.ini /usr/local/etc/php/conf.d/devstack.ini
 
 # Run as the default www-data user
 USER www-data
