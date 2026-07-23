@@ -7,6 +7,8 @@ RUN apk add --no-cache \
         git \
         unzip \
         curl \
+        libxml2-dev \
+        curl-dev \
         libzip-dev \
         zlib-dev \
         libpng-dev \
@@ -27,7 +29,10 @@ RUN docker-php-ext-configure gd --with-freetype --with-jpeg \
         zip \
         intl \
         bcmath \
-        opcache
+        opcache \
+        xml \
+        mbstring \
+        curl
 
 # Install PECL extensions (redis, imagick) and enable them
 RUN pecl install redis imagick \
