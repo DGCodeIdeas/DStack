@@ -37,8 +37,9 @@ from services import ServiceManager
 # against docker/docker-compose.yml (`./projects:/var/www/projects:ro` on nginx).
 PROJECTS_CONTAINER_ROOT = "/var/www/projects"
 
-# Default nginx container name (matches ${COMPOSE_PROJECT_NAME:-devstack}-nginx).
-NGINX_CONTAINER_NAME = os.getenv("DEVSTACK_NGINX_CONTAINER", "devstack-nginx")
+# Default nginx container name (matches ${COMPOSE_PROJECT_NAME:-devstack}-nginx in docker-compose.yml).
+_compose_project = os.getenv("COMPOSE_PROJECT_NAME", "devstack")
+NGINX_CONTAINER_NAME = os.getenv("DEVSTACK_NGINX_CONTAINER", f"{_compose_project}-nginx")
 
 # Env-overridable hosts file path (handy for non-Linux / CI environments where
 # /etc/hosts is not the right place, or where the user lacks permission).
