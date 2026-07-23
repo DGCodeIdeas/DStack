@@ -177,8 +177,35 @@ if [[ ! -f "${USER_DATA_SCRIPT}" ]]; then
     error "User-data script not found: ${USER_DATA_SCRIPT}"
 fi
 
-# Read the script and base64 encode it
-USER_DATA=$(base64 -w 0 "${USER_DATA_SCRIPT}")
+# ec2-setup.sh reads its config from environment variables (${VAR:-}). Those
+# variables exist in THIS shell (sourced from config.env above) but user-data
+# runs in a fresh shell on the instance, so they must be written into the
+# script itself before encoding it.
+log "Injecting config variables into user-data script..."
+INJECTED_VARS=$(cat <<VAREOF
+#!/usr/bin/env bash
+# Variables injected by provision-ec2.sh from cloud/config.env
+export GITHUB_REPO_URL=$(printf '%q' "${GITHUB_REPO_URL}")
+export GITHUB_BRANCH=$(printf '%q' "${GITHUB_BRANCH:-main}")
+export GITHUB_TOKEN=$(printf '%q' "${GITHUB_TOKEN:-}")
+export RDS_ENDPOINT=$(printf '%q' "${RDS_ENDPOINT}")
+export RDS_PORT=$(printf '%q' "${RDS_PORT:-3306}")
+export RDS_DB_NAME=$(printf '%q' "${RDS_DB_NAME}")
+export RDS_DB_USER=$(printf '%q' "${RDS_DB_USER}")
+export RDS_DB_PASSWORD=$(printf '%q' "${RDS_DB_PASSWORD}")
+export DOMAIN=$(printf '%q' "${DOMAIN:-}")
+export EMAIL_FOR_LETSENCRYPT=$(printf '%q' "${EMAIL_FOR_LETSENCRYPT:-}")
+export SSH_USER=$(printf '%q' "${SSH_USER:-ubuntu}")
+export COMPOSE_EXTRA_ENV=$(printf '%q' "${COMPOSE_EXTRA_ENV:-}")
+VAREOF
+)
+SETUP_BODY=$(tail -n +2 "${USER_DATA_SCRIPT}")
+COMBINED_SCRIPT="${INJECTED_VARS}
+${SETUP_BODY}"
+
+# Read the combined script and base64 encode it
+USER_DATA=$(printf '%s' "${COMBINED_SCRIPT}" | base64 -w 0)
+log "User-data prepared ($(printf '%s' "${COMBINED_SCRIPT}" | wc -l) lines)."
 
 # -----------------------------------------------------------------------------
 # Launch EC2 Instance
