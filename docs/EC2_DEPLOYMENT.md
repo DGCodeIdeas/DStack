@@ -168,6 +168,42 @@ Once bootstrap completes:
 - **HTTPS** (if DOMAIN configured): `https://<DOMAIN>`
 - **phpMyAdmin**: `http://<PUBLIC_IP>:8080`
 
+## Deploying to Existing EC2/RDS
+
+If you already have an EC2 instance and RDS database running, you can skip provisioning and bootstrap directly:
+
+```bash
+# Auto-detect instance by tag (default: dstack-prod)
+bash cloud/provision-ec2.sh --existing
+
+# Or specify the IP directly
+bash cloud/provision-ec2.sh --existing --ip <YOUR_EC2_PUBLIC_IP>
+
+# Or specify a custom tag
+bash cloud/provision-ec2.sh --existing --tag my-custom-tag
+```
+
+This will:
+1. Load configuration from `cloud/config.env`
+2. Find the existing running EC2 instance
+3. Run the DStack bootstrap script on the instance via SSH
+4. Install Docker, clone the repo, configure RDS, and start services
+
+### Prerequisites for existing EC2
+
+- The EC2 instance must be **running** and accessible via SSH
+- Security group must allow SSH (port 22) from your IP
+- The instance must be tagged with `Name=dstack-prod` (or your custom `INSTANCE_NAME_TAG`)
+- RDS must already exist and be accessible from the EC2 instance
+
+### After bootstrap
+
+Continue with the remaining steps:
+1. Monitor bootstrap: `ssh -i ~/.ssh/your-key.pem ubuntu@<IP> 'tail -f /var/log/dstack-bootstrap.log'`
+2. Verify containers: `docker compose ps`
+3. Create database on RDS (if not exists)
+4. Deploy your application
+
 ## RDS Security Group Configuration
 
 The provisioning script creates a security group (`dstack-sg`) that allows:

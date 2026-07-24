@@ -26,6 +26,162 @@ error() {
 }
 
 # -----------------------------------------------------------------------------
+# Argument parser
+# -----------------------------------------------------------------------------
+EXISTING_MODE=false
+PUBLIC_IP=""
+TAG=""
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --existing)
+            EXISTING_MODE=true
+            shift
+            ;;
+        --ip)
+            PUBLIC_IP="$2"
+            shift 2
+            ;;
+        --tag)
+            TAG="$2"
+            shift 2
+            ;;
+        *)
+            error "Unknown argument: $1"
+            ;;
+    esac
+done
+
+# -----------------------------------------------------------------------------
+# Existing EC2 bootstrap mode
+# -----------------------------------------------------------------------------
+run_existing_mode() {
+    log "Running in existing EC2 bootstrap mode..."
+
+    CONFIG_FILE="cloud/config.env"
+    if [[ ! -f "${CONFIG_FILE}" ]]; then
+        error "Config file not found: ${CONFIG_FILE}. Copy cloud/config.env.example to cloud/config.env and fill in your values."
+    fi
+
+    log "Loading configuration from ${CONFIG_FILE}..."
+    # shellcheck source=/dev/null
+    source "${CONFIG_FILE}"
+
+    required_vars=(
+        "AWS_REGION"
+        "RDS_ENDPOINT"
+        "RDS_PORT"
+        "RDS_DB_NAME"
+        "RDS_DB_USER"
+        "RDS_DB_PASSWORD"
+        "GITHUB_REPO_URL"
+        "SSH_USER"
+        "AWS_KEY_NAME"
+    )
+
+    for var in "${required_vars[@]}"; do
+        if [[ -z "${!var:-}" ]]; then
+            error "Required variable ${var} is not set in ${CONFIG_FILE}"
+        fi
+    done
+
+    if [[ -n "${PUBLIC_IP}" ]]; then
+        TARGET_IP="${PUBLIC_IP}"
+    else
+        TAG_FILTER="${TAG:-${INSTANCE_NAME_TAG:-dstack-prod}}"
+        log "Looking for running instance with tag: ${TAG_FILTER}"
+
+        TARGET_IP=$(aws ec2 describe-instances \
+            --region "${AWS_REGION}" \
+            --filters "Name=tag:Name,Values=${TAG_FILTER}" "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+
+        if [[ -z "${TARGET_IP}" || "${TARGET_IP}" == "None" ]]; then
+            error "Could not find a running instance with tag ${TAG_FILTER} in region ${AWS_REGION}"
+        fi
+    fi
+
+    log "Fetching instance details for ${TARGET_IP}..."
+    INSTANCE_INFO=$(aws ec2 describe-instances \
+        --region "${AWS_REGION}" \
+        --filters "Name=ip-address,Values=${TARGET_IP}" \
+        --query 'Reservations[0].Instances[0]' \
+        --output json)
+
+    INSTANCE_ID=$(echo "${INSTANCE_INFO}" | jq -r '.InstanceId')
+    PUBLIC_IP=$(echo "${INSTANCE_INFO}" | jq -r '.PublicIpAddress')
+
+    TEMP_SCRIPT=$(mktemp)
+    trap 'rm -f "${TEMP_SCRIPT}"' EXIT
+
+    {
+        echo "#!/usr/bin/env bash"
+        echo "# Bootstrapping existing EC2 instance: ${INSTANCE_ID}"
+        echo "export AWS_REGION=$(printf '%q' "${AWS_REGION}")"
+        echo "export RDS_ENDPOINT=$(printf '%q' "${RDS_ENDPOINT}")"
+        echo "export RDS_PORT=$(printf '%q' "${RDS_PORT}")"
+        echo "export RDS_DB_NAME=$(printf '%q' "${RDS_DB_NAME}")"
+        echo "export RDS_DB_USER=$(printf '%q' "${RDS_DB_USER}")"
+        echo "export RDS_DB_PASSWORD=$(printf '%q' "${RDS_DB_PASSWORD}")"
+        echo "export GITHUB_REPO_URL=$(printf '%q' "${GITHUB_REPO_URL}")"
+        echo "export SSH_USER=$(printf '%q' "${SSH_USER}")"
+        echo "export GITHUB_BRANCH=$(printf '%q' "${GITHUB_BRANCH:-main}")"
+        echo "export GITHUB_TOKEN=$(printf '%q' "${GITHUB_TOKEN:-}")"
+        echo "export DOMAIN=$(printf '%q' "${DOMAIN:-}")"
+        echo "export EMAIL_FOR_LETSENCRYPT=$(printf '%q' "${EMAIL_FOR_LETSENCRYPT:-}")"
+        echo "export COMPOSE_EXTRA_ENV=$(printf '%q' "${COMPOSE_EXTRA_ENV:-}")"
+        echo "export INSTANCE_NAME_TAG=$(printf '%q' "${INSTANCE_NAME_TAG:-dstack-prod}")"
+        echo ""
+        cat cloud/bootstrap-existing.sh
+    } > "${TEMP_SCRIPT}"
+
+    chmod +x "${TEMP_SCRIPT}"
+
+    log "Running bootstrap on ${TARGET_IP} via SSH..."
+    ssh -i ~/.ssh/${AWS_KEY_NAME}.pem -o StrictHostKeyChecking=no "${SSH_USER}@${TARGET_IP}" 'sudo bash -s' < "${TEMP_SCRIPT}"
+
+    rm -f "${TEMP_SCRIPT}"
+
+    echo ""
+    echo "==============================================================================="
+    echo "  DStack Existing EC2 Bootstrap Complete!"
+    echo "==============================================================================="
+    echo ""
+    echo "Instance Details:"
+    echo "  Instance ID:     ${INSTANCE_ID}"
+    echo "  Public IP:       ${PUBLIC_IP}"
+    echo "  Region:          ${AWS_REGION}"
+    echo "  SSH User:        ${SSH_USER}"
+    echo ""
+    echo "Next Steps:"
+    echo "==============================================================================="
+    echo ""
+    echo "1. Verify services are running:"
+    echo "   ssh -i ~/.ssh/${AWS_KEY_NAME}.pem ${SSH_USER}@${PUBLIC_IP} 'docker compose ps'"
+    echo ""
+    echo "2. Access the dashboard:"
+    echo "   HTTP:  http://${PUBLIC_IP}:5000"
+    if [[ -n "${DOMAIN:-}" && -n "${EMAIL_FOR_LETSENCRYPT:-}" ]]; then
+        echo "   HTTPS: https://${DOMAIN}"
+    fi
+    echo "   phpMyAdmin: http://${PUBLIC_IP}:8080"
+    echo ""
+    echo "3. SSH tunnel for local RDS access:"
+    echo "   ssh -i ~/.ssh/${AWS_KEY_NAME}.pem -L 3306:${RDS_ENDPOINT}:3306 ${SSH_USER}@${PUBLIC_IP}"
+    echo "   Then connect your local DB client to localhost:3306"
+    echo ""
+    echo "==============================================================================="
+
+    log "Existing EC2 bootstrap complete!"
+}
+
+if [[ "${EXISTING_MODE}" == true ]]; then
+    run_existing_mode
+    exit 0
+fi
+
+# -----------------------------------------------------------------------------
 # Pre-flight checks
 # -----------------------------------------------------------------------------
 log "Starting DStack EC2 provisioning..."
