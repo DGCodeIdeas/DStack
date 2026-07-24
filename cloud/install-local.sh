@@ -264,14 +264,19 @@ main() {
         log ".env already exists; leaving as-is."
     fi
 
+    # Compose resolves .env relative to the compose file's directory (docker/),
+    # not the repo root, so keep a synced copy there.
+    log "Syncing .env to docker/.env..."
+    cp "${ROOT_DIR}/.env" "${ROOT_DIR}/docker/.env"
+
     # -------------------------------------------------------------------------
     # 3. Build and start Docker Compose services
     # -------------------------------------------------------------------------
     log "Building Docker images..."
-    docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" build
+    docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" --env-file "${ROOT_DIR}/docker/.env" build
 
     log "Starting Docker Compose services..."
-    docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" up -d
+    docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" --env-file "${ROOT_DIR}/docker/.env" up -d
 
     # Wait for services to be healthy
     log "Waiting for services to become healthy (timeout 120s)..."
@@ -288,7 +293,7 @@ main() {
                 all_healthy=0
                 break
             fi
-        done < <(docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || true)
+        done < <(docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" --env-file "${ROOT_DIR}/docker/.env" ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || true)
 
         if [[ $all_healthy -eq 1 ]]; then
             ok "All services are healthy/running."
@@ -300,7 +305,7 @@ main() {
 
     if [[ $elapsed -ge $timeout ]]; then
         warn "Timeout waiting for all services to become healthy. Current status:"
-        docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" ps
+        docker compose -f "${ROOT_DIR}/docker/docker-compose.yml" --env-file "${ROOT_DIR}/docker/.env" ps
     fi
 
     # -------------------------------------------------------------------------
@@ -328,6 +333,18 @@ main() {
     # -------------------------------------------------------------------------
     log "Starting Flask dashboard (server/app.py) in background..."
     cd "${ROOT_DIR}"
+    # Ubuntu 24+ marks the system Python as externally-managed (PEP 668),
+    # so pip installs and direct execution need a venv.
+    if [[ ! -f "${ROOT_DIR}/venv/bin/activate" ]]; then
+        log "Creating Python virtual environment..."
+        python3 -m venv "${ROOT_DIR}/venv"
+        "${ROOT_DIR}/venv/bin/pip" install --quiet -r "${ROOT_DIR}/server/requirements.txt"
+        ok "Python venv ready."
+    else
+        log "Python venv already exists; skipping."
+    fi
+    # shellcheck source=/dev/null
+    source "${ROOT_DIR}/venv/bin/activate"
     nohup python3 server/app.py >> "${LOG_FILE}" 2>&1 &
     FLASK_PID=$!
     echo $FLASK_PID > "${ROOT_DIR}/.flask.pid"
@@ -422,7 +439,7 @@ main() {
 
     log "=== Installation Complete ==="
     log "Dashboard PID: $FLASK_PID (log: ${LOG_FILE})"
-    log "To stop: kill $FLASK_PID && docker compose -f ${ROOT_DIR}/docker/docker-compose.yml down"
+    log "To stop: kill $FLASK_PID && docker compose -f ${ROOT_DIR}/docker/docker-compose.yml --env-file ${ROOT_DIR}/docker/.env down"
 }
 
 # -----------------------------------------------------------------------------
