@@ -17,7 +17,7 @@
 | **Web Dashboard** | Single-page Vue-like UI (vanilla JS) served by Flask at `http://localhost:5000` |
 | **TUI** | Terminal UI (`python3 cli/tui.py`) for keyboard-driven service/vhost/log management |
 | **One-Command Install** | `./cloud/install-local.sh` — clones repo, builds images, starts stack, opens dashboard |
-| **EC2 Deployment** | `cloud/provision-ec2.sh` provisions an EC2 instance, bootstraps Docker, and deploys the stack |
+| **EC2 Deployment** | `cloud/provision-ec2.sh` provisions a new EC2 instance or bootstraps an existing one (`--existing`) |
 
 ---
 
@@ -144,9 +144,13 @@ Deploy the full stack to AWS EC2 with RDS backend:
 cp cloud/config.env.example cloud/config.env
 vim cloud/config.env  # Fill in AWS_REGION, AWS_KEY_NAME, RDS_ENDPOINT, etc.
 
-# 2. Provision EC2 + bootstrap stack
+# 2a. Provision NEW EC2 + bootstrap stack
 chmod +x cloud/provision-ec2.sh cloud/ec2-setup.sh
 ./cloud/provision-ec2.sh
+
+# 2b. Or bootstrap EXISTING EC2/RDS
+./cloud/provision-ec2.sh --existing
+# or: ./cloud/provision-ec2.sh --existing --ip <YOUR_EC2_PUBLIC_IP>
 
 # 3. Wait 2-3 min for bootstrap, then access:
 # HTTP:  http://<PUBLIC_IP>:5000

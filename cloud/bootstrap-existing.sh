@@ -1,13 +1,35 @@
 #!/usr/bin/env bash
 # =============================================================================
-# DStack EC2 Bootstrap Script (runs as user-data on EC2 first boot)
+# DStack Bootstrap Script for Existing EC2
 # =============================================================================
-# This script runs as root via cloud-init on first boot of the EC2 instance.
-# It installs Docker, clones the repo, configures environment, starts services,
-# and optionally configures Let's Encrypt SSL.
+# This script runs directly on an existing EC2 instance to set up DStack.
+# It installs Docker, clones the repo, configures environment, and starts services.
+# =============================================================================
+# Usage: sudo bash cloud/bootstrap-existing.sh
+# Prerequisites: Run on the EC2 instance itself, or use the generated script from
+#                setup-existing-ec2.sh which injects the variables below.
 # =============================================================================
 
 set -euo pipefail
+
+# -----------------------------------------------------------------------------
+# Configuration (set these before running, or export them)
+# -----------------------------------------------------------------------------
+# Required - set these environment variables or edit the values below:
+GITHUB_REPO_URL="${GITHUB_REPO_URL:-}"
+GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+GITHUB_TOKEN="${GITHUB_TOKEN:-}"
+RDS_ENDPOINT="${RDS_ENDPOINT:-}"
+RDS_PORT="${RDS_PORT:-3306}"
+RDS_DB_NAME="${RDS_DB_NAME:-dstack}"
+RDS_DB_USER="${RDS_DB_USER:-admin}"
+RDS_DB_PASSWORD="${RDS_DB_PASSWORD:-}"
+DOMAIN="${DOMAIN:-}"
+EMAIL_FOR_LETSENCRYPT="${EMAIL_FOR_LETSENCRYPT:-}"
+SSH_USER="${SSH_USER:-ubuntu}"
+
+# Optional
+COMPOSE_EXTRA_ENV="${COMPOSE_EXTRA_ENV:-}"
 
 # -----------------------------------------------------------------------------
 # Logging
@@ -27,34 +49,14 @@ warn() {
 }
 
 # -----------------------------------------------------------------------------
-# Configuration (passed via user-data or environment)
-# These should be injected via the provision-ec2.sh user-data encoding
-# -----------------------------------------------------------------------------
-# Required (injected by provision-ec2.sh via config.env)
-GITHUB_REPO_URL="${GITHUB_REPO_URL:-}"
-GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
-RDS_ENDPOINT="${RDS_ENDPOINT:-}"
-RDS_PORT="${RDS_PORT:-3306}"
-RDS_DB_NAME="${RDS_DB_NAME:-dstack}"
-RDS_DB_USER="${RDS_DB_USER:-admin}"
-RDS_DB_PASSWORD="${RDS_DB_PASSWORD:-}"
-DOMAIN="${DOMAIN:-}"
-EMAIL_FOR_LETSENCRYPT="${EMAIL_FOR_LETSENCRYPT:-}"
-SSH_USER="${SSH_USER:-ubuntu}"
-
-# Optional
-GITHUB_TOKEN="${GITHUB_TOKEN:-}"
-COMPOSE_EXTRA_ENV="${COMPOSE_EXTRA_ENV:-}"
-
-# -----------------------------------------------------------------------------
 # Validation
 # -----------------------------------------------------------------------------
-log "Starting DStack bootstrap..."
+log "Starting DStack bootstrap for existing EC2..."
 
 required_vars=("GITHUB_REPO_URL" "RDS_ENDPOINT" "RDS_DB_NAME" "RDS_DB_USER" "RDS_DB_PASSWORD")
 for var in "${required_vars[@]}"; do
     if [[ -z "${!var:-}" ]]; then
-        error "Required variable $var is not set"
+        error "Required variable $var is not set. Set it as an environment variable or edit this script."
         exit 1
     fi
 done
@@ -118,9 +120,7 @@ systemctl enable docker
 systemctl start docker
 
 # -----------------------------------------------------------------------------
-# Configure Docker daemon (DNS + log rotation) BEFORE any docker build/pull.
-# Ubuntu's systemd-resolved stub (127.0.0.53) is unreachable inside containers,
-# so builds that need DNS (composer, pecl) fail without this.
+# Configure Docker daemon (DNS + log rotation)
 # -----------------------------------------------------------------------------
 log "Configuring Docker daemon (DNS + log rotation)..."
 cat > /etc/docker/daemon.json <<'EOF'
@@ -140,8 +140,7 @@ log "Fixing /etc/resolv.conf for Docker build DNS..."
 ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
 
 # -----------------------------------------------------------------------------
-# Add 2 GB swap. t3.small has 2 GB RAM; imagick's PECL build compiles from
-# source and the OOM killer kills the build without swap headroom.
+# Add 2 GB swap
 # -----------------------------------------------------------------------------
 if [[ ! -f /swapfile ]]; then
     log "Creating 2 GB swapfile..."
@@ -154,7 +153,7 @@ if [[ ! -f /swapfile ]]; then
 fi
 
 # -----------------------------------------------------------------------------
-# Release port 80 in case a bare-metal web server is present on the AMI.
+# Release port 80
 # -----------------------------------------------------------------------------
 log "Ensuring port 80 is free..."
 systemctl stop apache2 2>/dev/null && systemctl disable apache2 2>/dev/null || true
@@ -162,7 +161,7 @@ systemctl stop nginx   2>/dev/null && systemctl disable nginx   2>/dev/null || t
 log "Port 80 cleared."
 
 # -----------------------------------------------------------------------------
-# Install Certbot (for Let's Encrypt)
+# Install Certbot
 # -----------------------------------------------------------------------------
 log "Installing Certbot..."
 DEBIAN_FRONTEND=noninteractive apt-get install -y certbot python3-certbot-nginx
@@ -180,7 +179,6 @@ if [[ -d "${REPO_DIR}" ]]; then
     git reset --hard "origin/${GITHUB_BRANCH}"
 else
     if [[ -n "${GITHUB_TOKEN}" ]]; then
-        # Use token for private repos
         REPO_URL_WITH_TOKEN="https://${GITHUB_TOKEN}@${GITHUB_REPO_URL#https://}"
         git clone -b "${GITHUB_BRANCH}" "${REPO_URL_WITH_TOKEN}" "${REPO_DIR}"
     else
@@ -198,7 +196,7 @@ log "Creating .env file for docker-compose..."
 
 cat > "${REPO_DIR}/.env" <<EOF
 # DStack Docker Compose Environment
-# Generated by ec2-setup.sh on $(date)
+# Generated by bootstrap-existing.sh on $(date)
 
 # =============================================================================
 # Database (RDS)
@@ -243,7 +241,7 @@ EOF
 
 log ".env file created at ${REPO_DIR}/.env"
 
-# Compose resolves .env relative to its own directory (docker/), not repo root.
+# Copy .env to docker directory
 cp "${REPO_DIR}/.env" "${REPO_DIR}/docker/.env"
 log ".env synced to ${REPO_DIR}/docker/.env"
 
@@ -252,7 +250,7 @@ log ".env synced to ${REPO_DIR}/docker/.env"
 # -----------------------------------------------------------------------------
 log "Creating docker-compose.override.yml for RDS..."
 cat > "${REPO_DIR}/docker/docker-compose.override.yml" <<EOF
-# Auto-generated by ec2-setup.sh
+# Auto-generated by bootstrap-existing.sh
 # Disables local MySQL (using RDS), points phpMyAdmin at RDS.
 
 services:
@@ -283,7 +281,7 @@ fi
 log "docker-compose.override.yml created"
 
 # -----------------------------------------------------------------------------
-# Create SSL directory and placeholder (certbot will populate)
+# Create SSL directory
 # -----------------------------------------------------------------------------
 mkdir -p "${REPO_DIR}/docker/ssl"
 
@@ -307,13 +305,10 @@ docker compose ps
 if [[ -n "${DOMAIN}" && -n "${EMAIL_FOR_LETSENCRYPT}" ]]; then
     log "Configuring Let's Encrypt SSL for ${DOMAIN}..."
 
-    # Wait a bit more for nginx to be ready
     sleep 5
 
-    # Stop nginx temporarily for standalone certbot
     docker compose stop nginx
 
-    # Obtain certificate using standalone mode (port 80 must be free)
     certbot certonly \
         --standalone \
         --non-interactive \
@@ -322,31 +317,25 @@ if [[ -n "${DOMAIN}" && -n "${EMAIL_FOR_LETSENCRYPT}" ]]; then
         -d "${DOMAIN}" \
         --preferred-challenges http
 
-    # Copy certificates to docker ssl directory
     cp "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" "${REPO_DIR}/docker/ssl/fullchain.pem"
     cp "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" "${REPO_DIR}/docker/ssl/privkey.pem"
 
-    # Set up auto-renewal cron job
     cat > /etc/cron.d/certbot-renew <<EOF
 # Certbot auto-renewal for DStack
 0 3 * * * root certbot renew --quiet --deploy-hook "cp /etc/letsencrypt/live/${DOMAIN}/fullchain.pem ${REPO_DIR}/docker/ssl/fullchain.pem && cp /etc/letsencrypt/live/${DOMAIN}/privkey.pem ${REPO_DIR}/docker/ssl/privkey.pem && cd ${REPO_DIR}/docker && docker compose restart nginx"
 EOF
 
-    # Restart nginx with SSL
     docker compose start nginx
 
     log "Let's Encrypt SSL configured for ${DOMAIN}"
-    log "Certificates will auto-renew via cron (daily at 3 AM)"
 else
     warn "DOMAIN or EMAIL_FOR_LETSENCRYPT not set - skipping Let's Encrypt setup"
-    warn "To enable HTTPS later, set DOMAIN and EMAIL_FOR_LETSENCRYPT in config.env and re-run bootstrap"
 fi
 
 # -----------------------------------------------------------------------------
-# Final status and URLs
+# Final status
 # -----------------------------------------------------------------------------
 PUBLIC_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "unknown")
-PUBLIC_DNS=$(curl -s http://169.254.169.254/latest/meta-data/public-hostname 2>/dev/null || echo "unknown")
 
 echo ""
 echo "==============================================================================="
@@ -369,21 +358,10 @@ echo "  Port: ${RDS_PORT}"
 echo "  Database: ${RDS_DB_NAME}"
 echo "  User: ${RDS_DB_USER}"
 echo ""
-echo "SSH Tunnel for local RDS access (run from YOUR machine):"
-echo "  ssh -i ~/.ssh/your-key.pem -L 3306:${RDS_ENDPOINT}:3306 ${SSH_USER}@${PUBLIC_IP}"
-echo ""
 echo "Logs:"
 echo "  Bootstrap log:     /var/log/dstack-bootstrap.log"
 echo "  Docker logs:       cd ${REPO_DIR}/docker && docker compose logs -f"
-echo "  Cloud-init log:    /var/log/cloud-init-output.log"
 echo ""
-echo "==============================================================================="
-echo "  Next Steps:"
-echo "==============================================================================="
-echo "1. Visit the dashboard URL above to complete setup"
-echo "2. Configure your DNS to point ${DOMAIN:-your-domain} to ${PUBLIC_IP}"
-echo "3. Set up SSH tunnel for local database access if needed"
-echo "4. Monitor logs: docker compose logs -f"
 echo "==============================================================================="
 
 log "Bootstrap completed successfully!"
