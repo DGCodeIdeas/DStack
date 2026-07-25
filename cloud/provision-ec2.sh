@@ -112,6 +112,14 @@ run_existing_mode() {
     INSTANCE_ID=$(echo "${INSTANCE_INFO}" | jq -r '.InstanceId')
     PUBLIC_IP=$(echo "${INSTANCE_INFO}" | jq -r '.PublicIpAddress')
 
+    # -------------------------------------------------------------------------
+    # Verify SSH key exists
+    # -------------------------------------------------------------------------
+    SSH_KEY_PATH="${SSH_KEY:-${HOME}/.ssh/${AWS_KEY_NAME}.pem}"
+    if [[ ! -f "${SSH_KEY_PATH}" ]]; then
+        error "SSH key not found at ${SSH_KEY_PATH}. Verify AWS_KEY_NAME='${AWS_KEY_NAME}' in cloud/config.env and that the key exists."
+    fi
+
     TEMP_SCRIPT=$(mktemp)
     trap 'rm -f "${TEMP_SCRIPT}"' EXIT
 
@@ -138,8 +146,32 @@ run_existing_mode() {
 
     chmod +x "${TEMP_SCRIPT}"
 
-    log "Running bootstrap on ${TARGET_IP} via SSH..."
-    ssh -i ~/.ssh/${AWS_KEY_NAME}.pem -o StrictHostKeyChecking=no "${SSH_USER}@${TARGET_IP}" 'sudo bash -s' < "${TEMP_SCRIPT}"
+    # -------------------------------------------------------------------------
+    # Run bootstrap with retry on transient SSH failures
+    # -------------------------------------------------------------------------
+    MAX_SSH_RETRIES=3
+    SSH_RETRY_DELAY=15
+    SSH_ATTEMPT=0
+    SSH_EXIT_CODE=0
+
+    while [[ ${SSH_ATTEMPT} -lt ${MAX_SSH_RETRIES} ]]; do
+        SSH_ATTEMPT=$((SSH_ATTEMPT + 1))
+        log "Running bootstrap on ${TARGET_IP} via SSH (attempt ${SSH_ATTEMPT}/${MAX_SSH_RETRIES})..."
+        ssh -i "${SSH_KEY_PATH}" -o ConnectTimeout=10 -o StrictHostKeyChecking=no "${SSH_USER}@${TARGET_IP}" 'sudo bash -s' < "${TEMP_SCRIPT}" || SSH_EXIT_CODE=$?
+
+        if [[ ${SSH_EXIT_CODE} -eq 0 ]]; then
+            break
+        elif [[ ${SSH_EXIT_CODE} -eq 255 ]]; then
+            if [[ ${SSH_ATTEMPT} -lt ${MAX_SSH_RETRIES} ]]; then
+                warn "SSH connection to ${TARGET_IP} failed (exit code 255). Retrying in ${SSH_RETRY_DELAY}s..."
+                sleep "${SSH_RETRY_DELAY}"
+            else
+                error "SSH connection to ${TARGET_IP} failed after ${MAX_SSH_RETRIES} attempts. Check security group, key pair, and instance state."
+            fi
+        else
+            error "Bootstrap failed on ${TARGET_IP} with exit code ${SSH_EXIT_CODE}. Check /var/log/dstack-bootstrap.log on the instance."
+        fi
+    done
 
     rm -f "${TEMP_SCRIPT}"
 
