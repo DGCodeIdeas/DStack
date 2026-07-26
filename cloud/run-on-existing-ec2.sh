@@ -5,12 +5,20 @@
 # Use this script when you already have an EC2 and RDS instance running.
 # It runs the bootstrap script directly on the specified instance via SSH.
 # =============================================================================
-# Usage: bash cloud/run-on-existing-ec2.sh <PUBLIC_IP>
-# Example: bash cloud/run-on-existing-ec2.sh 123.45.67.89
+# Usage: bash cloud/run-on-existing-ec2.sh <PUBLIC_IP> [--debug|-v]
+# Example: bash cloud/run-on-existing-ec2.sh 123.45.67.89 --debug
 # Prerequisites: AWS CLI installed and configured, cloud/config.env populated
 # =============================================================================
 
 set -euo pipefail
+
+# Pre-scan for --debug/-v so verbosity is active from the very first line,
+# including cloud/lib/debug.sh itself.
+for arg in "$@"; do
+    case "$arg" in
+        --debug|-v) export DEBUG=1 ;;
+    esac
+done
 
 # Verbosity toggle -- see cloud/lib/debug.sh for usage.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
@@ -28,15 +36,30 @@ error() {
 }
 
 # -----------------------------------------------------------------------------
-# Check for IP argument
+# Parse arguments: PUBLIC_IP is a required positional; --debug/-v is optional
+# and can appear before or after it.
 # -----------------------------------------------------------------------------
-if [[ -z "${1:-}" ]]; then
-    error "Usage: $0 <PUBLIC_IP>"
-    error "Example: $0 123.45.67.89"
+PUBLIC_IP=""
+for arg in "$@"; do
+    case "$arg" in
+        --debug|-v)
+            # Already applied by the pre-scan above.
+            ;;
+        -*)
+            error "Unknown argument: ${arg}"
+            ;;
+        *)
+            PUBLIC_IP="${arg}"
+            ;;
+    esac
+done
+
+if [[ -z "${PUBLIC_IP}" ]]; then
+    error "Usage: $0 <PUBLIC_IP> [--debug|-v]"
+    error "Example: $0 123.45.67.89 --debug"
     exit 1
 fi
 
-PUBLIC_IP="$1"
 log "Target EC2 instance: ${PUBLIC_IP}"
 
 # -----------------------------------------------------------------------------

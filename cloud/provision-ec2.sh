@@ -9,6 +9,15 @@
 
 set -euo pipefail
 
+# Pre-scan for --debug/-v so verbosity is active from the very first line,
+# including cloud/lib/debug.sh itself. The main argument parser below still
+# recognizes both flags too, so their position among other args doesn't matter.
+for arg in "$@"; do
+    case "$arg" in
+        --debug|-v) export DEBUG=1 ;;
+    esac
+done
+
 # Verbosity toggle -- see cloud/lib/debug.sh for usage.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
 
@@ -48,6 +57,12 @@ while [[ $# -gt 0 ]]; do
         --tag)
             TAG="$2"
             shift 2
+            ;;
+        --debug|-v)
+            # Already applied by the pre-scan above (before lib/debug.sh was
+            # sourced) -- recognized here just so it doesn't fall through to
+            # "Unknown argument" below.
+            shift
             ;;
         *)
             error "Unknown argument: $1"
