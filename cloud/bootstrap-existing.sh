@@ -218,6 +218,7 @@ DB_PORT=${RDS_PORT}
 DB_NAME=${RDS_DB_NAME}
 DB_USER=${RDS_DB_USER}
 DB_PASSWORD=${RDS_DB_PASSWORD}
+DB_ROOT_PASSWORD=${RDS_DB_PASSWORD}
 
 # =============================================================================
 # Application
