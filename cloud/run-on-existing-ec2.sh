@@ -12,6 +12,9 @@
 
 set -euo pipefail
 
+# Verbosity toggle -- see cloud/lib/debug.sh for usage.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
+
 # -----------------------------------------------------------------------------
 # Logging helpers
 # -----------------------------------------------------------------------------
@@ -115,6 +118,7 @@ TEMP_SCRIPT=$(mktemp)
     echo "export EMAIL_FOR_LETSENCRYPT=\"${EMAIL_FOR_LETSENCRYPT:-}\""
     echo "export SSH_USER=\"${SSH_USER:-ubuntu}\""
     echo "export COMPOSE_EXTRA_ENV=\"${COMPOSE_EXTRA_ENV:-}\""
+    echo "export DEBUG=\"${DEBUG:-0}\""
     echo ""
     # Source the bootstrap script
     echo "source /dev/stdin << 'BOOTSTRAP_EOF'"

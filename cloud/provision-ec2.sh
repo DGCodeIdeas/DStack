@@ -9,6 +9,9 @@
 
 set -euo pipefail
 
+# Verbosity toggle -- see cloud/lib/debug.sh for usage.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
+
 # -----------------------------------------------------------------------------
 # Logging helpers
 # -----------------------------------------------------------------------------
@@ -132,6 +135,7 @@ run_existing_mode() {
         echo "export EMAIL_FOR_LETSENCRYPT=$(printf '%q' "${EMAIL_FOR_LETSENCRYPT:-}")"
         echo "export COMPOSE_EXTRA_ENV=$(printf '%q' "${COMPOSE_EXTRA_ENV:-}")"
         echo "export INSTANCE_NAME_TAG=$(printf '%q' "${INSTANCE_NAME_TAG:-dstack-prod}")"
+        echo "export DEBUG=$(printf '%q' "${DEBUG:-0}")"
         echo ""
         cat cloud/bootstrap-existing.sh
     } > "${TEMP_SCRIPT}"
@@ -353,6 +357,7 @@ export DOMAIN=$(printf '%q' "${DOMAIN:-}")
 export EMAIL_FOR_LETSENCRYPT=$(printf '%q' "${EMAIL_FOR_LETSENCRYPT:-}")
 export SSH_USER=$(printf '%q' "${SSH_USER:-ubuntu}")
 export COMPOSE_EXTRA_ENV=$(printf '%q' "${COMPOSE_EXTRA_ENV:-}")
+export DEBUG=$(printf '%q' "${DEBUG:-0}")
 VAREOF
 )
 SETUP_BODY=$(tail -n +2 "${USER_DATA_SCRIPT}")
