@@ -51,10 +51,12 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         --ip)
+            [[ $# -ge 2 ]] || error "--ip requires an IP address value"
             PUBLIC_IP="$2"
             shift 2
             ;;
         --tag)
+            [[ $# -ge 2 ]] || error "--tag requires a tag value"
             TAG="$2"
             shift 2
             ;;
@@ -175,6 +177,7 @@ run_existing_mode() {
 
     while [[ ${SSH_ATTEMPT} -lt ${MAX_SSH_RETRIES} ]]; do
         SSH_ATTEMPT=$((SSH_ATTEMPT + 1))
+        SSH_EXIT_CODE=0
         log "Running bootstrap on ${TARGET_IP} via SSH (attempt ${SSH_ATTEMPT}/${MAX_SSH_RETRIES})..."
         ssh -i "${SSH_KEY_PATH}" -o ConnectTimeout=10 -o StrictHostKeyChecking=no "${SSH_USER}@${TARGET_IP}" 'sudo bash -s' < "${TEMP_SCRIPT}" || SSH_EXIT_CODE=$?
 
@@ -193,6 +196,7 @@ run_existing_mode() {
     done
 
     rm -f "${TEMP_SCRIPT}"
+    trap - EXIT
 
     echo ""
     echo "==============================================================================="
@@ -412,7 +416,7 @@ COMBINED_SCRIPT="${INJECTED_VARS}
 ${SETUP_BODY}"
 
 # Read the combined script and base64 encode it
-USER_DATA=$(printf '%s' "${COMBINED_SCRIPT}" | base64 -w 0)
+USER_DATA=$(printf '%s' "${COMBINED_SCRIPT}" | base64 | tr -d '\n')
 log "User-data prepared ($(printf '%s' "${COMBINED_SCRIPT}" | wc -l) lines)."
 
 # -----------------------------------------------------------------------------
@@ -466,7 +470,8 @@ log "Fetching instance details..."
 INSTANCE_INFO=$(aws ec2 describe-instances \
     --instance-ids "${INSTANCE_ID}" \
     --region "${AWS_REGION}" \
-    --query 'Reservations[0].Instances[0]')
+    --query 'Reservations[0].Instances[0]' \
+    --output json)
 
 PUBLIC_IP=$(echo "${INSTANCE_INFO}" | jq -r '.PublicIpAddress // "pending"')
 PUBLIC_DNS=$(echo "${INSTANCE_INFO}" | jq -r '.PublicDnsName // "pending"')
