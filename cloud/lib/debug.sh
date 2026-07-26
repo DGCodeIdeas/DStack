@@ -25,6 +25,9 @@
 # =============================================================================
 
 if [[ "${DEBUG:-0}" == "1" ]]; then
-    export PS4='+ [\D{%H:%M:%S}] ${BASH_SOURCE##*/}:${LINENO}:${FUNCNAME[0]:-main}(): '
+    _debug_src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]:-stdin}}"
+    _debug_src="${_debug_src##*/}"
+    export PS4="+ [\\D{%H:%M:%S}] ${_debug_src}:"'${LINENO}:${FUNCNAME[0]:-main}(): '
+    unset _debug_src
     set -x
 fi
