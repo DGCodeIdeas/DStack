@@ -271,7 +271,9 @@ services:
       - disabled
 
   phpmyadmin:
-    depends_on: {}
+    depends_on:
+      php:
+        condition: service_started
     environment:
       PMA_HOST: ${RDS_ENDPOINT}
       PMA_PORT: ${RDS_PORT}
