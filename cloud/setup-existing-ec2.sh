@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Verbosity toggle -- see cloud/lib/debug.sh for usage.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
+
 # -----------------------------------------------------------------------------
 # Logging helpers
 # -----------------------------------------------------------------------------
