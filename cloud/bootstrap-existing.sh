@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# Verbosity toggle. DEBUG is set via an `export` line injected by whichever
+# script assembled this file (provision-ec2.sh / run-on-existing-ec2.sh) --
+# inlined here rather than sourced from cloud/lib/debug.sh because this
+# script runs via `bash -s` over stdin, before any repo exists on this host.
+if [[ "${DEBUG:-0}" == "1" ]]; then
+    export PS4='+ [\D{%H:%M:%S}] ${BASH_SOURCE##*/}:${LINENO}:${FUNCNAME[0]:-main}(): '
+    set -x
+fi
+
 # -----------------------------------------------------------------------------
 # Configuration (set these before running, or export them)
 # -----------------------------------------------------------------------------

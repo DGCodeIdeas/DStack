@@ -17,6 +17,9 @@
 
 set -euo pipefail
 
+# Verbosity toggle -- see cloud/lib/debug.sh for usage.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/lib/debug.sh"
+
 # Resolve the project root (parent of this script's directory).
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
