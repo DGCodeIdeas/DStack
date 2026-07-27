@@ -1,6 +1,6 @@
 # DStack — Local Development Stack Manager
 
-**DStack** is a lightweight, Docker-based local development stack manager for PHP/Laravel applications. It provides a Flask-based REST API and web dashboard to manage Docker services, virtual hosts, SSL certificates, database backups, RDS tunnels, and logs — all from a single interface.
+**DStack** is a lightweight, Docker-based local development stack manager for PHP/Laravel applications. It provides a Laravel-based REST API and web dashboard to manage Docker services, virtual hosts, SSL certificates, database backups, RDS tunnels, and logs — all from a single interface.
 
 ---
 
@@ -11,11 +11,11 @@
 | **Service Management** | Start/stop/restart Docker Compose services (nginx, php-fpm, mysql, redis, phpmyadmin) via API or UI |
 | **Virtual Hosts** | Create/delete nginx vhosts for PHP, Laravel, Symfony, WordPress, or static sites |
 | **SSL Certificates** | Generate locally-trusted certs with **mkcert** or request **Let's Encrypt** certs via API/UI |
-| **RDS SSH Tunnel** | Secure SSH tunnel from localhost → EC2 bastion → Amazon RDS (paramiko, no external deps) |
+| **RDS SSH Tunnel** | Secure SSH tunnel from localhost → EC2 bastion → Amazon RDS (ssh binary + PID file) |
 | **Log Aggregation** | Tail/follow logs from nginx, php-fpm, mysql, redis, phpmyadmin via API or streaming UI |
 | **Backup & Restore** | Dump/restore MySQL databases (all or single DB) with timestamped manifests |
-| **Web Dashboard** | Single-page Vue-like UI (vanilla JS) served by Flask at `http://localhost:5000` |
-| **TUI** | Terminal UI (`python3 cli/tui.py`) for keyboard-driven service/vhost/log management |
+| **Web Dashboard** | Single-page UI (vanilla JS) served by Laravel at `http://localhost:5000` |
+| **CLI Commands** | Artisan commands (`php artisan dstack:*`) for bootstrap, setup, update, and health checks |
 | **One-Command Install** | `./cloud/install-local.sh` — clones repo, builds images, starts stack, opens dashboard |
 | **EC2 Deployment** | `cloud/provision-ec2.sh` provisions a new EC2 instance or bootstraps an existing one (`--existing`) |
 
@@ -29,14 +29,13 @@
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │  ┌──────────────┐     ┌────────────────────────────────────────────────┐   │
-│  │   Browser    │────▶│              Flask API (port 5000)             │   │
+│  │   Browser    │────▶│              Laravel API (port 5000)            │   │
 │  │  (Dashboard) │     │  ┌──────────────────────────────────────────┐  │   │
 │  └──────────────┘     │  │           ServiceManager                  │  │   │
 │                       │  │  • docker compose ps/up/down/restart       │  │   │
 │  ┌──────────────┐     │  │  • Health checks (nginx, php, mysql, etc) │  │   │
-│  │   Terminal   │────▶│  └──────────────────────────────────────────┘  │   │
-│  │   (TUI)      │     │  ┌──────────────────────────────────────────┐  │   │
-│  └──────────────┘     │  │           VirtualHostManager              │  │   │
+│  │   Terminal   │────▶│  ┌──────────────────────────────────────────┐  │   │
+│  │   (CLI)      │     │  │           VirtualHostManager              │  │   │
 │                       │  │  • Create/delete nginx vhost configs      │  │   │
 │  ┌──────────────┐     │  │  • Frameworks: php, laravel, symfony,     │  │   │
 │  │   curl /     │────▶│  │    wordpress, static                      │  │   │
@@ -47,7 +46,7 @@
 │                       │  │  • Let's Encrypt (standalone/webroot)     │  │   │
 │                       │  └──────────────────────────────────────────┘  │   │
 │                       │  ┌──────────────────────────────────────────┐  │   │
-│                       │  │           RDSTunnel (paramiko)            │  │   │
+│                       │  │           RdsTunnelService (ssh binary)     │  │   │
 │                       │  │  • SSH tunnel: localhost → EC2 → RDS      │  │   │
 │                       │  │  • Auto-reconnect with backoff            │  │   │
 │                       │  └──────────────────────────────────────────┘  │   │
@@ -106,7 +105,7 @@ The script will:
 2. 📦 Build Docker images
 3. 🚀 Start all services (nginx, php-fpm, mysql, redis, phpmyadmin)
 4. 🌐 Create a test vhost (`testapp.local`)
-5. 🌐 Start Flask dashboard on `http://localhost:5000`
+5. 🌐 Start Laravel panel on `http://localhost:5000`
 6. 🌐 Open dashboard in browser (if `DISPLAY` is set)
 
 ### Access Points
@@ -128,8 +127,8 @@ cp .env.example .env
 docker compose -f docker/docker-compose.yml build
 docker compose -f docker/docker-compose.yml up -d
 
-# 3. Start Flask API
-python3 server/app.py
+# 3. Start Laravel panel
+php artisan serve --host=127.0.0.1 --port=5000
 # Dashboard at http://localhost:5000
 ```
 
@@ -192,7 +191,7 @@ Base URL: `http://localhost:5000/api`
 
 ## 🖥️ Web Dashboard
 
-Start the Flask server and open `http://localhost:5000`:
+Start the Laravel panel and open `http://localhost:5000`:
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
@@ -206,15 +205,25 @@ Start the Flask server and open `http://localhost:5000`:
 
 ---
 
-## ⌨️ Terminal UI (TUI)
+## ⌨️ CLI Commands
 
 ```bash
-python3 cli/tui.py
+# Bootstrap the environment (Docker, PHP, migrations, APP_KEY)
+php artisan dstack:bootstrap
+
+# First-run setup (pull images, create admin, create first vhost)
+php artisan dstack:setup
+
+# Self-update (git pull, composer install, migrate, restart)
+php artisan dstack:update
+
+# Health check (Docker, port 5000, storage, SQLite, nginx)
+php artisan dstack:health
 ```
 
 Navigate with arrow keys, `Enter` to select, `q` to quit.
 
-![TUI](docs/screenshots/tui.png)
+![Panel](docs/screenshots/panel.png)
 
 ---
 
@@ -238,23 +247,22 @@ DStack/
 │   ├── mysql.cnf           # MySQL config
 │   ├── ssl/                # SSL certs (mkcert/LE)
 │   └── vhosts/             # Generated vhost configs
-├── server/                 # Flask backend
-│   ├── app.py              # Flask app + API routes
-│   ├── services.py         # ServiceManager (docker compose)
-│   ├── virtual_hosts.py    # VirtualHostManager (nginx vhosts)
-│   ├── ssl_manager.py      # SSLManager (mkcert + LE)
-│   ├── rds_tunnel.py       # RDSTunnel (paramiko SSH)
-│   ├── logs_aggregator.py  # LogAggregator (docker logs)
-│   ├── backup_restore.py   # BackupManager (mysqldump)
-│   ├── test_*.py           # Unit/integration tests
-│   └── requirements.txt    # Python deps
-├── cli/                    # Terminal UI
-│   ├── tui.py              # Textual-based TUI
-│   └── test_tui.py         # TUI tests
-├── web-ui/                 # Dashboard (vanilla JS)
-│   ├── index.html
-│   ├── css/style.css
-│   └── js/app.js
+├── app/                    # Laravel application
+│   ├── Http/Controllers/   # API controllers
+│   ├── Http/Requests/      # Form request validation
+│   ├── Services/           # Service layer (DockerCompose, Vhost, SSL, etc.)
+│   ├── Providers/          # Service providers
+│   └── Console/Commands/   # Artisan commands
+├── config/                 # Laravel config (dstack.php, database.php)
+├── database/               # Migrations and seeds
+│   └── migrations/
+├── resources/              # Blade views, JS, SCSS
+│   ├── views/
+│   ├── js/
+│   └── sass/
+├── routes/                 # API and web routes
+├── systemd/                # systemd service file
+├── init.sh                 # Installation script
 ├── projects/               # Project roots (mounted into containers)
 │   ├── sample-app/         # Minimal Laravel-style skeleton
 │   ├── demo.local/
@@ -289,9 +297,8 @@ DB_NAME=devstack
 DB_USER=devstack
 DB_PASSWORD=changeme
 
-# Flask
+# DStack Panel
 APP_PORT=5000
-FLASK_DEBUG=false
 ```
 
 ### `cloud/config.env` (EC2)
@@ -318,8 +325,8 @@ python3 -m pytest server/test_*.py -v
 python3 -m pytest cli/test_tui.py -q
 
 # Syntax checks
-python3 -m py_compile server/*.py cli/*.py
-node --check web-ui/js/app.js   # if node available
+# PHP syntax check
+php -l app/
 bash -n cloud/*.sh
 ```
 
@@ -344,7 +351,7 @@ See [docs/TESTING.md](docs/TESTING.md) for detailed test scenarios and manual ve
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
-3. Run tests: `python3 -m pytest server/test_*.py cli/test_tui.py -q`
+3. Run tests: `./vendor/bin/phpunit`
 4. Commit changes: `git commit -m 'Add amazing feature'`
 5. Push to branch: `git push origin feature/amazing-feature`
 6. Open a Pull Request
@@ -362,7 +369,7 @@ See [docs/TESTING.md](docs/TESTING.md) for detailed test scenarios and manual ve
 |-------|----------|
 | **Docker daemon not reachable** | `sudo systemctl start docker` + add user to `docker` group |
 | **Port 80/443 in use** | Change `NGINX_PORT` in `.env` or stop conflicting service |
-| **Flask won't start** | Check `devstack.log`, ensure port 5000 free, Python deps installed |
+| **Panel won't start** | Check `devstack.log`, ensure port 5000 free, PHP deps installed |
 | **Vhost not accessible** | Add `127.0.0.1 yourdomain.local` to `/etc/hosts` |
 | **mkcert certs not trusted** | Run `mkcert -install` (requires `libnss3-tools` on Linux) |
 | **RDS tunnel fails** | Verify EC2 SG allows SSH from your IP, RDS SG allows 3306 from EC2 SG |
@@ -379,11 +386,10 @@ MIT License — see [LICENSE](LICENSE) for details.
 ## 🙏 Acknowledgments
 
 - [Docker](https://docker.com) & [Docker Compose](https://docs.docker.com/compose/)
-- [Flask](https://flask.palletsprojects.com/) + [Flask-CORS](https://flask-cors.readthedocs.io/)
+- [Laravel](https://laravel.com/) + [Symfony Process](https://symfony.com/doc/current/components/process.html)
 - [nginx](https://nginx.org/) + [PHP-FPM](https://www.php.net/manual/en/install.fpm.php)
 - [mkcert](https://github.com/FiloSottile/mkcert) for local TLS
-- [paramiko](https://www.paramiko.org/) for SSH tunnels
-- [Textual](https://textual.textualize.io/) for the TUI
+- [ssh](https://man.openbsd.org/ssh) for SSH tunnels
 - [phpMyAdmin](https://www.phpmyadmin.net/)
 
 ---

@@ -96,7 +96,6 @@ test-results/
 # Database files
 *.sqlite
 *.sqlite3
-*.db
 
 # Temporary files
 tmp/
@@ -178,3 +177,55 @@ site/
 .idea/usage.statistics.xml
 .idea/dictionaries/
 .idea/shelf/
+
+# ──────────────────────────────────────────────
+# DSTACK PANEL SPECIFIC
+# ──────────────────────────────────────────────
+
+# Laravel storage
+storage/database/*.db
+storage/database/*.db-journal
+storage/database/*.db-wal
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+storage/framework/testing/
+storage/logs/
+storage/app/private/
+storage/app/public/
+
+# Bootstrap cache
+bootstrap/cache/*.php
+!bootstrap/cache/.gitkeep
+
+# Tunnel PID file
+storage/tunnel.pid
+
+# Public assets (compiled)
+public/assets/
+public/css/
+public/js/
+public/mix-manifest.json
+public/hot
+
+# Laravel vendor
+vendor/
+
+# Composer
+composer.phar
+
+# Environment
+.env
+.env.backup
+
+# IDE - Laravel specific
+.phpstorm.meta.php
+_ide_helper.php
+_ide_helper_models.php
+
+# Testing
+phpunit.xml
+.phpunit.result.cache
+
+# Sail
+docker-compose.override.yml

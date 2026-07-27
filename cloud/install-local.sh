@@ -331,43 +331,31 @@ main() {
         warn "mkcert not installed; skipping local CA install. HTTPS certs will not be auto-trusted."
     fi
 
-    # -------------------------------------------------------------------------
-    # 6. Start Flask dashboard (background)
-    # -------------------------------------------------------------------------
-    log "Starting Flask dashboard (server/app.py) in background..."
-    cd "${ROOT_DIR}"
-    # Ubuntu 24+ marks the system Python as externally-managed (PEP 668),
-    # so pip installs and direct execution need a venv.
-    if [[ ! -f "${ROOT_DIR}/venv/bin/activate" ]]; then
-        log "Creating Python virtual environment..."
-        python3 -m venv "${ROOT_DIR}/venv"
-        "${ROOT_DIR}/venv/bin/pip" install --quiet -r "${ROOT_DIR}/server/requirements.txt"
-        ok "Python venv ready."
-    else
-        log "Python venv already exists; skipping."
-    fi
-    # shellcheck source=/dev/null
-    source "${ROOT_DIR}/venv/bin/activate"
-    nohup python3 server/app.py >> "${LOG_FILE}" 2>&1 &
-    FLASK_PID=$!
-    echo $FLASK_PID > "${ROOT_DIR}/.flask.pid"
-    log "Flask PID: $FLASK_PID (logged to ${LOG_FILE})"
+# -------------------------------------------------------------------------
+# 6. Start Laravel panel (background)
+# -------------------------------------------------------------------------
+log "Starting Laravel panel (php artisan serve) in background..."
+cd "${ROOT_DIR}"
+nohup php artisan serve --host=127.0.0.1 --port=5000 >> "${LOG_FILE}" 2>&1 &
+PANEL_PID=$!
+echo $PANEL_PID > "${ROOT_DIR}/.panel.pid"
+log "Panel PID: $PANEL_PID (logged to ${LOG_FILE})"
 
-    # Wait for port 5000
-    log "Waiting for Flask dashboard on port 5000..."
-    local flask_timeout=30
-    local flask_elapsed=0
-    while [[ $flask_elapsed -lt $flask_timeout ]]; do
-        if curl -s -f "http://localhost:5000/api/health" >/dev/null 2>&1; then
-            ok "Flask dashboard is up on http://localhost:5000"
-            break
-        fi
-        sleep 1
-        flask_elapsed=$((flask_elapsed + 1))
-    done
-    if [[ $flask_elapsed -ge $flask_timeout ]]; then
-        warn "Flask dashboard did not respond in time. Check ${LOG_FILE} for errors."
+# Wait for port 5000
+log "Waiting for Laravel panel on port 5000..."
+local panel_timeout=30
+local panel_elapsed=0
+while [[ $panel_elapsed -lt $panel_timeout ]]; do
+    if curl -s -f "http://localhost:5000/api/health" >/dev/null 2>&1; then
+        ok "Laravel panel is up on http://localhost:5000"
+        break
     fi
+    sleep 1
+    panel_elapsed=$((panel_elapsed + 1))
+done
+if [[ $panel_elapsed -ge $panel_timeout ]]; then
+    warn "Laravel panel did not respond in time. Check ${LOG_FILE} for errors."
+fi
 
     # -------------------------------------------------------------------------
     # 7. Create initial test vhost
@@ -440,9 +428,9 @@ main() {
         xdg-open "http://localhost:5000" >/dev/null 2>&1 &
     fi
 
-    log "=== Installation Complete ==="
-    log "Dashboard PID: $FLASK_PID (log: ${LOG_FILE})"
-    log "To stop: kill $FLASK_PID && docker compose -f ${ROOT_DIR}/docker/docker-compose.yml --env-file ${ROOT_DIR}/docker/.env down"
+log "=== Installation Complete ==="
+log "Panel PID: $PANEL_PID (log: ${LOG_FILE})"
+log "To stop: kill $PANEL_PID && docker compose -f ${ROOT_DIR}/docker/docker-compose.yml --env-file ${ROOT_DIR}/docker/.env down"
 }
 
 # -----------------------------------------------------------------------------
