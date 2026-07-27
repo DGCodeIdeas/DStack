@@ -20,17 +20,17 @@ return [
     */
     'root' => env('DSTACK_ROOT', '/opt/dstack-panel'),
 
-    'compose_file' => env('DSTACK_DOCKER_COMPOSE_FILE'),
+    'compose_file' => env('DSTACK_DOCKER_COMPOSE_FILE', '/opt/dstack-panel/docker/docker-compose.yml'),
 
-    'env_file' => env('DSTACK_DOCKER_ENV_FILE'),
+    'env_file' => env('DSTACK_DOCKER_ENV_FILE', '/opt/dstack-panel/.env'),
 
-    'vhosts_dir' => env('DSTACK_VHOSTS_DIR'),
+    'vhosts_dir' => env('DSTACK_VHOSTS_DIR', '/opt/dstack-panel/docker/vhosts'),
 
-    'ssl_dir' => env('DSTACK_SSL_DIR'),
+    'ssl_dir' => env('DSTACK_SSL_DIR', '/opt/dstack-panel/docker/ssl'),
 
-    'projects_dir' => env('DSTACK_PROJECTS_DIR'),
+    'projects_dir' => env('DSTACK_PROJECTS_DIR', '/opt/dstack-panel/projects'),
 
-    'backups_dir' => env('DSTACK_BACKUPS_DIR'),
+    'backups_dir' => env('DSTACK_BACKUPS_DIR', '/opt/dstack-panel/backups'),
 
     /*
     |--------------------------------------------------------------------------

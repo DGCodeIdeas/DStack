@@ -7,7 +7,7 @@ set -euo pipefail
 # ──────────────────────────────────────────────
 
 ROOT="/opt/dstack-panel"
-REPO="https://github.com/DGCodeIdeas/chada.digital"
+REPO="https://github.com/DGCodeIdeas/DStack.git"
 
 echo "==> DStack Panel init.sh"
 
@@ -36,6 +36,12 @@ if ! command -v composer &>/dev/null; then
     php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
     php composer-setup.php --install-dir=/usr/local/bin --filename=composer
     rm -f composer-setup.php
+fi
+
+# 3.1 Ensure www-data can access Docker (needed for panel service control)
+if ! getent group docker | grep -qw www-data; then
+    echo "==> Adding www-data to docker group..."
+    usermod -aG docker www-data
 fi
 
 # 4. Clone/update repo
