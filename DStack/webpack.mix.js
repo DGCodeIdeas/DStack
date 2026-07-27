@@ -56,6 +56,6 @@ if (mix.inProduction()) {
     );
 }
 
-mix.postCss('resources/css/app.css', 'public/assets/css')
+mix.sass('resources/sass/app.scss', 'public/assets/css')
    .js('resources/js/app.js', 'public/assets/js')
    .webpackConfig(baseConfig);

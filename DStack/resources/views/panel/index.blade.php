@@ -7,6 +7,23 @@
     <link rel="stylesheet" href="/assets/css/app.css">
 </head>
 <body>
+    <!-- Splash Screen -->
+    <div id="splash-screen" role="status" aria-live="polite">
+        <div class="splash-brand">
+            <svg class="splash-monogram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                <line x1="12" y1="22" x2="12" y2="15.5"></line>
+                <polyline points="22 8.5 12 15.5 2 8.5"></polyline>
+            </svg>
+            <h1 class="splash-title">DStack</h1>
+            <p class="splash-subtitle">Local Development Stack</p>
+        </div>
+        <p id="splash-status" class="splash-status">Initializing...</p>
+        <div class="splash-progress-track">
+            <div id="splash-progress" class="splash-progress-bar"></div>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
