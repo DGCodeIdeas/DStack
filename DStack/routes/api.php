@@ -1,13 +1,14 @@
 <?php
 
-use App\Http\Controllers\HealthController;
-use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ServiceController;
-use App\Http\Controllers\VhostController;
-use App\Http\Controllers\SslController;
-use App\Http\Controllers\RdsTunnelController;
-use App\Http\Controllers\LogController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\EventController;
+use App\Http\Controllers\HealthController;
+use App\Http\Controllers\LogController;
+use App\Http\Controllers\RdsTunnelController;
+use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SslController;
+use App\Http\Controllers\VhostController;
 
 Route::get('/health', [HealthController::class, 'index']);
 
@@ -32,3 +33,5 @@ Route::get('/logs/{service}/stream', [LogController::class, 'stream']);
 Route::post('/backup', [BackupController::class, 'create']);
 Route::get('/backups', [BackupController::class, 'index']);
 Route::post('/restore', [BackupController::class, 'restore']);
+
+Route::get('/events', [EventController::class, 'stream'])->withoutMiddleware(['throttle:api']);
