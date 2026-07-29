@@ -7,7 +7,7 @@ use PHPUnit\Framework\TestCase;
 
 class SslServiceTest extends TestCase
 {
-    public function testRenderSslServerBlock(): void
+    public function test_render_ssl_server_block(): void
     {
         $result = SslService::renderSslServerBlock(
             'example.local',
@@ -25,7 +25,7 @@ class SslServiceTest extends TestCase
         $this->assertStringContainsString('fastcgi_pass php:9000;', $result);
     }
 
-    public function testRemoveHttpsBlock(): void
+    public function test_remove_https_block(): void
     {
         $content = <<<'NGINX'
 server {
@@ -46,7 +46,7 @@ NGINX;
         $this->assertStringContainsString('listen 80', $result);
     }
 
-    public function testInjectHttpRedirect(): void
+    public function test_inject_http_redirect(): void
     {
         $content = <<<'NGINX'
 server {
@@ -64,7 +64,7 @@ NGINX;
         $this->assertStringContainsString('return 301 https://$host$request_uri;', $result);
     }
 
-    public function testInjectHttpRedirectNoMatch(): void
+    public function test_inject_http_redirect_no_match(): void
     {
         $content = <<<'NGINX'
 server {

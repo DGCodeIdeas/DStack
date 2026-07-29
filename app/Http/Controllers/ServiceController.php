@@ -17,15 +17,15 @@ class ServiceController extends Controller
         $knownServices = config('dstack.known_services', ['nginx', 'php', 'mysql', 'phpmyadmin', 'redis', 'all']);
         $validActions = ['start', 'stop', 'restart'];
 
-        if (!in_array($service, $knownServices)) {
+        if (! in_array($service, $knownServices)) {
             return response()->json([
                 'success' => false,
-                'message' => "Unknown service '{$service}'. Valid services: " . implode(', ', $knownServices),
+                'message' => "Unknown service '{$service}'. Valid services: ".implode(', ', $knownServices),
                 'status' => null,
             ], 400);
         }
 
-        if (!in_array($action, $validActions)) {
+        if (! in_array($action, $validActions)) {
             return response()->json([
                 'success' => false,
                 'message' => "Unknown action '{$action}'. Valid: start, stop, restart",

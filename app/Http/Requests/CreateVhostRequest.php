@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use App\Services\VhostService;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Translation\ArrayLoader;
+use Illuminate\Translation\Translator;
+use Illuminate\Validation\ValidationException;
 
 class CreateVhostRequest extends FormRequest
 {
@@ -23,13 +27,13 @@ class CreateVhostRequest extends FormRequest
 
     public function passedValidation(): void
     {
-        $service = new VhostService();
+        $service = new VhostService;
         [$ok, $err] = $service::validateDomain($this->input('domain'));
-        if (!$ok) {
-            throw new \Illuminate\Validation\ValidationException(
-                (new \Illuminate\Contracts\Validation\Validator(
-                    new \Illuminate\Translation\Translator(
-                        new \Illuminate\Translation\ArrayLoader(),
+        if (! $ok) {
+            throw new ValidationException(
+                (new Validator(
+                    new Translator(
+                        new ArrayLoader,
                         'en'
                     ),
                     ['domain' => [$err]],

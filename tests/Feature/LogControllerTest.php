@@ -12,6 +12,8 @@ class LogControllerTest extends TestCase
 
     public function test_index_returns_logs(): void
     {
+        $this->actingAsUser();
+
         $log = $this->createMock(LogService::class);
         $log->method('getLogs')->with('nginx', 50)->willReturn([
             'success' => true,
@@ -34,8 +36,10 @@ class LogControllerTest extends TestCase
         ]);
     }
 
-    public function test_index_unknown_service_returns_400(): void
+    public function test_index_unknown_service_returns_error_payload(): void
     {
+        $this->actingAsUser();
+
         $log = $this->createMock(LogService::class);
         $log->method('getLogs')->willReturn([
             'success' => false,
@@ -51,11 +55,16 @@ class LogControllerTest extends TestCase
 
         $response = $this->getJson('/api/logs/invalid');
 
-        $response->assertStatus(400);
+        $response->assertStatus(200);
+        $response->assertJson([
+            'success' => false,
+        ]);
     }
 
     public function test_stream_returns_logs(): void
     {
+        $this->actingAsUser();
+
         $log = $this->createMock(LogService::class);
         $log->method('getLogs')->willReturn([
             'success' => true,

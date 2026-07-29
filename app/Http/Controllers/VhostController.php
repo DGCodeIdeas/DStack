@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\CreateVhostRequest;
 use App\Services\VhostService;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 
 class VhostController extends Controller
 {
@@ -20,6 +20,7 @@ class VhostController extends Controller
             $request->input('root'),
             $request->input('framework', 'php')
         );
+
         return response()->json($result, $result['success'] ? 200 : 400);
     }
 

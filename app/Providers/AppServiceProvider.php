@@ -2,13 +2,13 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-use App\Services\DockerComposeService;
-use App\Services\VhostService;
-use App\Services\SslService;
-use App\Services\RdsTunnelService;
-use App\Services\LogService;
 use App\Services\BackupService;
+use App\Services\DockerComposeService;
+use App\Services\LogService;
+use App\Services\RdsTunnelService;
+use App\Services\SslService;
+use App\Services\VhostService;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -22,8 +22,5 @@ class AppServiceProvider extends ServiceProvider
         $this->app->singleton(BackupService::class);
     }
 
-    public function boot(): void
-    {
-        //
-    }
+    public function boot(): void {}
 }

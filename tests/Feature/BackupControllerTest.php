@@ -12,6 +12,8 @@ class BackupControllerTest extends TestCase
 
     public function test_create_backup_returns_success(): void
     {
+        $this->actingAsUser();
+
         $backup = $this->createMock(BackupService::class);
         $backup->method('backup')->willReturn([
             'success' => true,
@@ -37,6 +39,8 @@ class BackupControllerTest extends TestCase
 
     public function test_index_returns_backup_list(): void
     {
+        $this->actingAsUser();
+
         $backup = $this->createMock(BackupService::class);
         $backup->method('listBackups')->willReturn([
             ['id' => '20260727_120000', 'timestamp' => '20260727_120000', 'description' => 'Test backup', 'database' => 'all', 'size_bytes' => 1024, 'files' => ['all.sql.gz']],
@@ -54,6 +58,8 @@ class BackupControllerTest extends TestCase
 
     public function test_restore_returns_404_for_missing_backup(): void
     {
+        $this->actingAsUser();
+
         $backup = $this->createMock(BackupService::class);
         $backup->method('restore')->willReturn([
             'success' => false,
@@ -76,6 +82,8 @@ class BackupControllerTest extends TestCase
 
     public function test_restore_returns_success(): void
     {
+        $this->actingAsUser();
+
         $backup = $this->createMock(BackupService::class);
         $backup->method('restore')->willReturn([
             'success' => true,

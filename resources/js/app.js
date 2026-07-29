@@ -1,388 +1,753 @@
-// Configuration
-const CONFIG = {
-    apiBase: '/api',
+const API = {
+    async request(method, url, payload) {
+        const csrf = document.querySelector('meta[name="csrf-token"]');
+        const headers = {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        };
+        if (csrf) {
+            headers['X-CSRF-TOKEN'] = csrf.getAttribute('content');
+        }
+        const options = { method, headers };
+        if (payload && method !== 'GET') {
+            options.body = JSON.stringify(payload);
+        }
+        const res = await fetch(url, options);
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP ${res.status}`));
+        }
+        return data;
+    },
+    get(url) { return this.request('GET', url); },
+    post(url, body) { return this.request('POST', url, body); },
+    del(url) { return this.request('DELETE', url); },
+};
+const qs = (id) => document.getElementById(id);
+
+/* ────────────────────────────────────
+   Splash Screen
+   ──────────────────────────────────── */
+const Splash = {
+    shown: sessionStorage.getItem('dstack-splash-shown') === '1',
+    statusEl: null,
+    progressEl: null,
+    maxTime: 1200,
+    minTime: 350,
+    startTime: 0,
+    resolved: false,
+
+    init() {
+        this.statusEl = qs('splash-status');
+        this.progressEl = qs('splash-progress');
+        if (!this.statusEl || !this.progressEl) return;
+        if (this.shown) {
+            qs('splash-screen')?.remove();
+            return;
+        }
+        this.startTime = Date.now();
+        this.show();
+    },
+
+    show() {
+        const el = qs('splash-screen');
+        if (el) el.classList.remove('hidden');
+    },
+
+    hide() {
+        if (this.resolved) return;
+        this.resolved = true;
+        const elapsed = Date.now() - this.startTime;
+        const remaining = Math.max(0, this.minTime - elapsed);
+        setTimeout(() => {
+            const el = qs('splash-screen');
+            if (el) el.classList.add('hidden');
+            sessionStorage.setItem('dstack-splash-shown', '1');
+        }, remaining);
+    },
+
+    setProgress(percent) {
+        if (this.progressEl) {
+            this.progressEl.style.width = Math.min(100, Math.max(0, percent)) + '%';
+        }
+    },
+
+    setStatus(text) {
+        if (this.statusEl) this.statusEl.textContent = text;
+    },
+
+    dispose() {
+        setTimeout(() => this.hide(), this.maxTime);
+    },
 };
 
-// Utility: fetch with error handling
-async function apiFetch(url, options = {}) {
-    try {
-        const response = await fetch(CONFIG.apiBase + url, {
-            headers: { 'Content-Type': 'application/json', ...options.headers },
-            ...options,
-        });
-        const data = await response.json();
-        return { ok: response.ok, status: response.status, data };
-    } catch (err) {
-        return { ok: false, status: 0, data: { success: false, message: err.message } };
+/* ────────────────────────────────────
+   Skeleton Markup Helpers
+   ──────────────────────────────────── */
+const Skeletons = {
+    serviceCards(count = 6) {
+        let html = '';
+        for (let i = 0; i < count; i++) {
+            html += `
+            <div class="card service-card" aria-hidden="true">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div class="skeleton-line skeleton-title"></div>
+                        <div class="skeleton-line skeleton-subtitle" style="margin-top:8px;"></div>
+                    </div>
+                    <div class="skeleton-line skeleton-btn" style="width:48px; height:10px; border-radius:999px;"></div>
+                </div>
+                <div style="margin-top:16px; display:flex; gap:8px;">
+                    <div class="skeleton-line skeleton-btn"></div>
+                    <div class="skeleton-line skeleton-btn"></div>
+                    <div class="skeleton-line skeleton-btn"></div>
+                </div>
+            </div>`;
+        }
+        return html;
+    },
+
+    tableRows(columns = 5, rows = 4) {
+        const widths = Array.from({ length: columns }, () => 50 + Math.floor(Math.random() * 40));
+        let html = '';
+        for (let r = 0; r < rows; r++) {
+            html += '<tr aria-hidden="true">';
+            for (let c = 0; c < columns; c++) {
+                html += `<td><div class="skeleton-line" style="width:${widths[c]}%"></div></td>`;
+            }
+            html += '</tr>';
+        }
+        return html;
+    },
+
+    logsViewer(lines = 8) {
+        let html = '';
+        for (let i = 0; i < lines; i++) {
+            const width = 55 + Math.floor(Math.random() * 40);
+            html += `<span class="skeleton-line" style="display:block;width:${width}%;margin-bottom:10px;"></span>`;
+        }
+        return html;
+    },
+};
+
+/* ────────────────────────────────────
+   Button Loading State
+   ──────────────────────────────────── */
+function setButtonLoading(btn, isLoading) {
+    if (!btn) return;
+    if (isLoading) {
+        btn.dataset.originalText = btn.innerHTML;
+        btn.classList.add('is-loading');
+        btn.disabled = true;
+        const label = btn.textContent?.trim() || 'Loading';
+        btn.innerHTML = `<span class="spinner"></span> ${label}...`;
+    } else {
+        btn.classList.remove('is-loading');
+        btn.disabled = false;
+        if (btn.dataset.originalText) {
+            btn.innerHTML = btn.dataset.originalText;
+            delete btn.dataset.originalText;
+        }
     }
 }
 
-// Toast notifications
-function showToast(message, type = 'info') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-    toast.textContent = message;
-    container.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
+/* ────────────────────────────────────
+   SSE Stream
+   ──────────────────────────────────── */
+function initEventStream() {
+    const source = new EventSource('/api/events');
+
+    source.addEventListener('services', (e) => {
+        const data = JSON.parse(e.data);
+        const container = qs('services-grid');
+        if (!container) return;
+        container.setAttribute('aria-busy', 'false');
+        container.innerHTML = '';
+        const statusColors = { running: 'status-running', stopped: 'status-stopped', unknown: 'status-unknown' };
+        const services = Object.entries(data || {}).map(([name, info]) => ({
+            name,
+            running: info.state === 'running',
+            image: info.image || '',
+            status: info.status || '',
+            health: info.health || '',
+        }));
+        for (const service of services) {
+            const card = document.createElement('div');
+            card.className = 'card service-card section-content';
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700;">${service.name}</div>
+                        <div style="font-size:12px; color:#9ca3af;">${service.image || ''}</div>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span class="status-dot ${statusColors[service.running ? 'running' : 'stopped'] || 'status-unknown'}"></span>
+                        <span style="font-size:12px;">${service.running ? 'running' : 'stopped'}</span>
+                    </div>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:6px;">
+                    <button class="btn btn-success" data-action="start" data-service="${service.name}">Start</button>
+                    <button class="btn btn-danger" data-action="stop" data-service="${service.name}">Stop</button>
+                    <button class="btn btn-secondary" data-action="restart" data-service="${service.name}">Restart</button>
+                </div>
+            `;
+            container.appendChild(card);
+        }
+        qs('services-last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    });
+
+    source.addEventListener('vhosts', (e) => {
+        const data = JSON.parse(e.data);
+        const tbody = qs('vhosts-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        for (const v of data || []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${v.domain}</td>
+                <td>${v.framework}</td>
+                <td>${v.root || '-'}</td>
+                <td>${v.config_path || '-'}</td>
+                <td><button class="btn btn-danger" data-delete-vhost="${v.domain}">Delete</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    });
+
+    source.addEventListener('ssl', (e) => {
+        const data = JSON.parse(e.data);
+        const tbody = qs('ssl-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        for (const cert of Array.isArray(data) ? data : []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${cert.domain}</td>
+                <td>${cert.type || '-'}</td>
+                <td>${cert.cert_path || '-'}</td>
+                <td>${cert.key_path || '-'}</td>
+                <td><span class="status-dot status-running"></span> Active</td>
+                <td><button class="btn btn-danger" data-delete-ssl="${cert.domain}">Remove</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    });
+
+    source.addEventListener('backups', (e) => {
+        const data = JSON.parse(e.data);
+        const tbody = qs('backups-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        for (const backup of Array.isArray(data) ? data : []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${backup.id}</td>
+                <td>${backup.timestamp || ''}</td>
+                <td>${backup.description || ''}</td>
+                <td>${backup.database || ''}</td>
+                <td>${backup.size_bytes || '-'}</td>
+                <td>${(backup.files || []).length || '-'}</td>
+                <td><button class="btn btn-primary" data-restore="${backup.id}">Restore</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    });
+
+    source.addEventListener('rds', (e) => {
+        const data = JSON.parse(e.data);
+        const indicator = qs('#rds-status-indicator');
+        const text = indicator?.querySelector('.status-text');
+        const ports = ['rds-local-port', 'rds-rds-host', 'rds-ec2-host'];
+
+        if (indicator) indicator.className = 'status-indicator status-unknown';
+        if (text) text.textContent = 'Loading...';
+        ports.forEach((id) => {
+            const el = qs(`#${id}`);
+            if (el) el.textContent = '-';
+        });
+
+        if (data.connected) {
+            if (indicator) indicator.className = 'status-indicator status-running';
+            if (text) text.textContent = 'Connected';
+        } else {
+            if (indicator) indicator.className = 'status-indicator status-stopped';
+            if (text) text.textContent = 'Disconnected';
+        }
+        const values = [data.local_port, data.rds_host, data.ec2_host];
+        ports.forEach((id, idx) => {
+            const el = qs(`#${id}`);
+            if (el) el.textContent = values[idx] || '-';
+        });
+    });
+
+    source.addEventListener('logs', (e) => {
+        const data = JSON.parse(e.data);
+        const viewer = qs('logs-viewer');
+        if (!viewer) return;
+        if (!data.logs || data.logs.length === 0) {
+            viewer.textContent = 'No logs available';
+            return;
+        }
+        viewer.textContent = data.logs.map((l) => l.message || l.raw).join('\n');
+    });
+
+    source.addEventListener('error', () => {
+        source.close();
+        setTimeout(initEventStream, 3000);
+    });
+
+    source.addEventListener('close', () => {
+        source.close();
+    });
+
+    source.onopen = () => {
+        source.addEventListener('open', () => {});
+    };
 }
 
-// Services
-async function loadServices() {
-    const { data } = await apiFetch('/services');
-    const grid = document.getElementById('services-grid');
-    if (!grid) return;
+/* ────────────────────────────────────
+   Health
+   ──────────────────────────────────── */
+const healthStatus = qs('health-status');
+async function initHealth() {
+    try {
+        const data = await API.get('/api/health');
+        const el = healthStatus?.querySelector('.status-text');
+        if (data.status === 'ok') {
+            if (el) el.textContent = 'API Healthy';
+        } else {
+            if (el) el.textContent = 'API Unhealthy';
+        }
+    } catch (e) {
+        const el = healthStatus?.querySelector('.status-text');
+        if (el) el.textContent = 'API Unreachable';
+    }
+}
 
-    if (data.error) {
-        grid.innerHTML = `<div class="card"><p>Error: ${data.error}</p></div>`;
+/* ────────────────────────────────────
+   Services
+   ──────────────────────────────────── */
+async function loadServices() {
+    const container = qs('services-grid');
+    if (!container) return;
+    container.innerHTML = Skeletons.serviceCards(6);
+    container.setAttribute('aria-busy', 'true');
+    try {
+        const data = await API.get('/api/services');
+        container.setAttribute('aria-busy', 'false');
+        container.innerHTML = '';
+        const statusColors = { running: 'status-running', stopped: 'status-stopped', unknown: 'status-unknown' };
+        const services = Object.entries(data || {}).map(([name, info]) => ({
+            name,
+            running: info.state === 'running',
+            image: info.image || '',
+            status: info.status || '',
+            health: info.health || '',
+        }));
+        for (const service of services) {
+            const card = document.createElement('div');
+            card.className = 'card service-card section-content';
+            card.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:700;">${service.name}</div>
+                        <div style="font-size:12px; color:#9ca3af;">${service.image || ''}</div>
+                    </div>
+                    <div style="display:flex; gap:6px; align-items:center;">
+                        <span class="status-dot ${statusColors[service.running ? 'running' : 'stopped'] || 'status-unknown'}"></span>
+                        <span style="font-size:12px;">${service.running ? 'running' : 'stopped'}</span>
+                    </div>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:6px;">
+                    <button class="btn btn-success" data-action="start" data-service="${service.name}">Start</button>
+                    <button class="btn btn-danger" data-action="stop" data-service="${service.name}">Stop</button>
+                    <button class="btn btn-secondary" data-action="restart" data-service="${service.name}">Restart</button>
+                </div>
+            `;
+            container.appendChild(card);
+        }
+        qs('services-last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+    } catch (e) {
+        container.setAttribute('aria-busy', 'false');
+        container.innerHTML = `<div class="card" style="color:#fecaca;">Failed to load services: ${e.message}</div>`;
+    }
+}
+
+document.addEventListener('click', function (e) {
+    const btn = e.target.closest('[data-action][data-service]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    const service = btn.dataset.service;
+    if (service === 'all') {
+        setButtonLoading(btn, true);
+        const targets = document.querySelectorAll('#services-grid [data-service]');
+        targets.forEach((t) => {
+            const s = t.dataset.service;
+            API.post(`/api/services/${s}/${action}`);
+        });
+        setButtonLoading(btn, false);
+        loadServices();
         return;
     }
-
-    const entries = Object.entries(data);
-    grid.innerHTML = entries.map(([name, info]) => {
-        const state = info.state || info.status || 'unknown';
-        const health = info.health || '';
-        const stateClass = state === 'running' ? 'status-healthy' : state === 'exited' ? 'status-error' : 'status-unknown';
-        return `
-            <div class="service-card card">
-                <h3>${name}</h3>
-                <span class="status-indicator ${stateClass}"><span class="status-dot"></span><span class="status-text">${state}</span></span>
-                ${health ? `<span class="health-badge">${health}</span>` : ''}
-                <div class="service-actions">
-                    <button class="btn btn-sm btn-success" data-action="start" data-service="${name}">Start</button>
-                    <button class="btn btn-sm btn-danger" data-action="stop" data-service="${name}">Stop</button>
-                    <button class="btn btn-sm btn-secondary" data-action="restart" data-service="${name}">Restart</button>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    document.getElementById('services-last-updated').textContent = `Updated: ${new Date().toLocaleTimeString()}`;
-}
-
-// Service actions
-async function serviceAction(service, action) {
-    const { data } = await apiFetch(`/services/${service}/${action}`, { method: 'POST' });
-    if (data.success) {
-        showToast(`${action} ${service} successful`, 'success');
+    if (['start', 'stop', 'restart'].includes(action)) {
+        setButtonLoading(btn, true);
+        API.post(`/api/services/${service}/${action}`).finally(() => setButtonLoading(btn, false));
         loadServices();
-    } else {
-        showToast(data.message || `Failed to ${action} ${service}`, 'error');
     }
-}
+});
 
-// Vhosts
+/* ────────────────────────────────────
+   Vhosts
+   ──────────────────────────────────── */
 async function loadVhosts() {
-    const { data } = await apiFetch('/vhosts');
-    const tbody = document.getElementById('vhosts-tbody');
+    const tbody = qs('vhosts-tbody');
     if (!tbody) return;
-
-    tbody.innerHTML = (data || []).map(v => `
-        <tr>
-            <td>${v.domain}</td>
-            <td>${v.framework}</td>
-            <td>${v.root || '-'}</td>
-            <td>${v.config_path || '-'}</td>
-            <td>
-                <button class="btn btn-sm btn-danger" onclick="deleteVhost('${v.domain}')">Delete</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-async function createVhost(domain, framework = 'php') {
-    const { data } = await apiFetch('/vhosts', {
-        method: 'POST',
-        body: JSON.stringify({ domain, framework }),
-    });
-    if (data.success) {
-        showToast(`Vhost ${domain} created`, 'success');
-        loadVhosts();
-    } else {
-        showToast(data.message || 'Failed to create vhost', 'error');
+    tbody.innerHTML = Skeletons.tableRows(5, 4);
+    try {
+        const data = await API.get('/api/vhosts');
+        tbody.innerHTML = '';
+        for (const v of data || []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${v.domain}</td>
+                <td>${v.framework}</td>
+                <td>${v.root || '-'}</td>
+                <td>${v.config_path || '-'}</td>
+                <td><button class="btn btn-danger" data-delete-vhost="${v.domain}">Delete</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:#fecaca;">Failed to load vhosts: ${e.message}</td></tr>`;
     }
 }
-
-async function deleteVhost(domain) {
-    if (!confirm(`Delete vhost ${domain}?`)) return;
-    const { data } = await apiFetch(`/vhosts/${encodeURIComponent(domain)}`, { method: 'DELETE' });
-    if (data.success) {
-        showToast(`Vhost ${domain} deleted`, 'success');
-        loadVhosts();
-    } else {
-        showToast(data.message || 'Failed to delete vhost', 'error');
-    }
-}
-
-// SSL
-async function loadCerts() {
-    const { data } = await apiFetch('/ssl');
-    const tbody = document.getElementById('ssl-tbody');
-    if (!tbody) return;
-
-    tbody.innerHTML = (data || []).map(c => `
-        <tr>
-            <td>${c.domain}</td>
-            <td>${c.cert_path}</td>
-            <td>${c.key_path}</td>
-            <td><span class="status-indicator ${c.exists ? 'status-healthy' : 'status-error'}"><span class="status-dot"></span>${c.exists ? 'Exists' : 'Missing'}</span></td>
-            <td></td>
-        </tr>
-    `).join('');
-}
-
-async function createLocalSsl(domain) {
-    const { data } = await apiFetch('/ssl/local', {
-        method: 'POST',
-        body: JSON.stringify({ domain }),
-    });
-    if (data.success) {
-        showToast(`SSL cert for ${domain} created via mkcert`, 'success');
-        loadCerts();
-    } else {
-        showToast(data.message || 'Failed to create SSL cert', 'error');
-    }
-}
-
-async function createLetsEncryptSsl(domain, email, mode, webrootPath) {
-    const { data } = await apiFetch('/ssl/letsencrypt', {
-        method: 'POST',
-        body: JSON.stringify({ domain, email, mode, webroot_path: webrootPath }),
-    });
-    if (data.success) {
-        showToast(`SSL cert for ${domain} created via Let's Encrypt`, 'success');
-        loadCerts();
-    } else {
-        showToast(data.message || 'Failed to create SSL cert', 'error');
-    }
-}
-
-// RDS Tunnel
-async function loadRdsStatus() {
-    const { data } = await apiFetch('/rds/tunnel/status');
-    const indicator = document.getElementById('rds-status-indicator');
-    const details = document.getElementById('rds-status-details');
-
-    if (data.connected) {
-        indicator.className = 'status-indicator status-healthy';
-        indicator.querySelector('.status-text').textContent = 'Connected';
-        document.getElementById('rds-local-port').textContent = data.local_port;
-        document.getElementById('rds-rds-host').textContent = data.rds_host;
-        document.getElementById('rds-ec2-host').textContent = data.ec2_host;
-        details.classList.remove('hidden');
-    } else {
-        indicator.className = 'status-indicator status-unknown';
-        indicator.querySelector('.status-text').textContent = 'Disconnected';
-        details.classList.add('hidden');
-    }
-}
-
-async function startRdsTunnel(ec2Host, ec2User, ec2KeyPath, rdsHost, rdsPort, localPort) {
-    const { data } = await apiFetch('/rds/tunnel/start', {
-        method: 'POST',
-        body: JSON.stringify({ ec2_host: ec2Host, ec2_user: ec2User, ec2_key_path: ec2KeyPath, rds_host: rdsHost, rds_port: rdsPort, local_port: localPort }),
-    });
-    if (data.success) {
-        showToast('RDS tunnel started', 'success');
-        loadRdsStatus();
-    } else {
-        showToast(data.message || 'Failed to start tunnel', 'error');
-    }
-}
-
-async function stopRdsTunnel() {
-    const { data } = await apiFetch('/rds/tunnel/stop', { method: 'POST' });
-    if (data.success) {
-        showToast('RDS tunnel stopped', 'success');
-        loadRdsStatus();
-    } else {
-        showToast(data.message || 'Failed to stop tunnel', 'error');
-    }
-}
-
-// Logs
-async function loadLogs(service = 'all', lines = 100) {
-    const { data } = await apiFetch(`/logs/${service}?lines=${lines}`);
-    const viewer = document.getElementById('logs-viewer');
-    if (!viewer) return;
-
-    if (data.success) {
-        viewer.textContent = (data.lines || []).join('\n');
-    } else {
-        viewer.textContent = data.message || 'Failed to load logs';
-    }
-}
-
-// Backups
-async function loadBackups() {
-    const { data } = await apiFetch('/backups');
-    const tbody = document.getElementById('backups-tbody');
-    if (!tbody) return;
-
-    tbody.innerHTML = (data || []).map(b => `
-        <tr>
-            <td>${b.id}</td>
-            <td>${b.timestamp}</td>
-            <td>${b.description || '-'}</td>
-            <td>${b.database || 'all'}</td>
-            <td>${formatBytes(b.size_bytes || 0)}</td>
-            <td>${(b.files || []).join(', ')}</td>
-            <td>
-                <button class="btn btn-sm btn-danger" onclick="restoreBackup('${b.id}')">Restore</button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-async function createBackup(database, description) {
-    const { data } = await apiFetch('/backup', {
-        method: 'POST',
-        body: JSON.stringify({ database, description }),
-    });
-    if (data.success) {
-        showToast(`Backup ${data.backup_id} created`, 'success');
-        loadBackups();
-    } else {
-        showToast(data.message || 'Failed to create backup', 'error');
-    }
-}
-
-async function restoreBackup(backupId) {
-    if (!confirm(`Restore from backup ${backupId}?`)) return;
-    const { data } = await apiFetch('/restore', {
-        method: 'POST',
-        body: JSON.stringify({ backup_id: backupId }),
-    });
-    if (data.success) {
-        showToast('Restore completed', 'success');
-        loadBackups();
-    } else {
-        showToast(data.message || 'Restore failed', 'error');
-    }
-}
-
-function formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
-
-// Event listeners
-document.addEventListener('DOMContentLoaded', () => {
-    // Initial loads
-    loadServices();
+document.addEventListener('click', async function (e) {
+    const btn = e.target.closest('[data-delete-vhost]');
+    if (!btn) return;
+    const domain = btn.dataset.deleteVhost;
+    setButtonLoading(btn, true);
+    await API.del(`/api/vhosts/${encodeURIComponent(domain)}`).finally(() => setButtonLoading(btn, false));
     loadVhosts();
-    loadCerts();
-    loadRdsStatus();
-    loadLogs();
-    loadBackups();
+});
 
-    // Auto-refresh services
-    setInterval(loadServices, 5000);
-    setInterval(loadRdsStatus, 5000);
-
-    // Auto-refresh logs
-    const autoRefresh = document.getElementById('logs-auto-refresh');
-    if (autoRefresh && autoRefresh.checked) {
-        setInterval(() => {
-            const service = document.getElementById('logs-service-select')?.value || 'all';
-            loadLogs(service);
-        }, 3000);
+/* ────────────────────────────────────
+   SSL
+   ──────────────────────────────────── */
+async function loadSsl() {
+    const tbody = qs('ssl-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = Skeletons.tableRows(5, 4);
+    try {
+        const data = await API.get('/api/ssl');
+        tbody.innerHTML = '';
+        for (const cert of Array.isArray(data) ? data : []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${cert.domain}</td>
+                <td>${cert.type || '-'}</td>
+                <td>${cert.cert_path || '-'}</td>
+                <td>${cert.key_path || '-'}</td>
+                <td><span class="status-dot status-running"></span> Active</td>
+                <td><button class="btn btn-danger" data-delete-ssl="${cert.domain}">Remove</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="6" style="color:#fecaca;">Failed to load SSL certificates: ${e.message}</td></tr>`;
     }
+}
 
-    // Start/Stop All buttons
-    document.getElementById('start-all')?.addEventListener('click', () => serviceAction('all', 'start'));
-    document.getElementById('stop-all')?.addEventListener('click', () => serviceAction('all', 'stop'));
+/* ────────────────────────────────────
+   Backups
+   ──────────────────────────────────── */
+async function loadBackups() {
+    const tbody = qs('backups-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = Skeletons.tableRows(7, 4);
+    try {
+        const data = await API.get('/api/backups');
+        tbody.innerHTML = '';
+        for (const backup of Array.isArray(data) ? data : []) {
+            const tr = document.createElement('tr');
+            tr.className = 'section-content';
+            tr.innerHTML = `
+                <td>${backup.id}</td>
+                <td>${backup.timestamp || ''}</td>
+                <td>${backup.description || ''}</td>
+                <td>${backup.database || ''}</td>
+                <td>${backup.size_bytes || '-'}</td>
+                <td>${(backup.files || []).length || '-'}</td>
+                <td><button class="btn btn-primary" data-restore="${backup.id}">Restore</button></td>
+            `;
+            tbody.appendChild(tr);
+        }
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="color:#fecaca;">Failed to load backups: ${e.message}</td></tr>`;
+    }
+}
+document.addEventListener('click', async function (e) {
+    const btn = e.target.closest('[data-restore]');
+    if (!btn) return;
+    const backupId = btn.dataset.restore;
+    setButtonLoading(btn, true);
+    let database = '';
+    database = prompt('Restore database (leave empty for all):', database);
+    if (database === null) {
+        setButtonLoading(btn, false);
+        return;
+    }
+    try {
+        const data = await API.post('/api/restore', { backup_id: backupId, database });
+        showToast(data.message, data.success);
+        loadBackups();
+    } catch (err) {
+        showToast(err.message, false);
+    } finally {
+        setButtonLoading(btn, false);
+    }
+});
 
-    // Service card actions (delegated)
-    document.getElementById('services-grid')?.addEventListener('click', (e) => {
-        const btn = e.target.closest('button[data-action]');
-        if (!btn) return;
-        const service = btn.dataset.service;
-        const action = btn.dataset.action;
-        serviceAction(service, action);
+/* ────────────────────────────────────
+   Logs
+   ──────────────────────────────────── */
+async function loadLogs(service) {
+    const viewer = qs('logs-viewer');
+    if (!viewer) return;
+    viewer.innerHTML = Skeletons.logsViewer(8);
+    try {
+        const data = await API.get(`/api/logs/${service}`);
+        if (!data.logs || data.logs.length === 0) {
+            viewer.textContent = 'No logs available';
+            return;
+        }
+        viewer.textContent = data.logs.map((l) => l.message || l.raw).join('\n');
+    } catch (e) {
+        viewer.textContent = `Error loading logs: ${e.message}`;
+    }
+}
+
+async function initLogStream() {
+    const service = qs('#logs-service-select')?.value || 'all';
+    await loadLogs(service);
+}
+
+/* ────────────────────────────────────
+   RDS Status
+   ──────────────────────────────────── */
+async function initRdsStatus() {
+    const indicator = qs('#rds-status-indicator');
+    const text = indicator?.querySelector('.status-text');
+    const ports = ['rds-local-port', 'rds-rds-host', 'rds-ec2-host'];
+
+    if (indicator) indicator.className = 'status-indicator status-unknown';
+    if (text) text.textContent = 'Loading...';
+    ports.forEach((id) => {
+        const el = qs(`#${id}`);
+        if (el) el.textContent = '-';
     });
 
-    // Add Vhost button
-    document.getElementById('add-vhost-btn')?.addEventListener('click', () => {
-        document.getElementById('vhost-modal').classList.remove('hidden');
-    });
+    try {
+        const data = await API.get('/api/rds/tunnel/status');
+        if (data.connected) {
+            if (indicator) indicator.className = 'status-indicator status-running';
+            if (text) text.textContent = 'Connected';
+        } else {
+            if (indicator) indicator.className = 'status-indicator status-stopped';
+            if (text) text.textContent = 'Disconnected';
+        }
+        const values = [data.local_port, data.rds_host, data.ec2_host];
+        ports.forEach((id, idx) => {
+            const el = qs(`#${id}`);
+            if (el) el.textContent = values[idx] || '-';
+        });
+    } catch (e) {
+        if (indicator) indicator.className = 'status-indicator status-unknown';
+        if (text) text.textContent = 'Unreachable';
+    }
+}
 
-    // Vhost form
-    document.getElementById('vhost-form')?.addEventListener('submit', (e) => {
+/* ────────────────────────────────────
+   Forms
+   ──────────────────────────────────── */
+function showToast(message, ok = true) {
+    const container = qs('toast-container') || document.body;
+    const el = document.createElement('div');
+    el.style.padding = '10px 12px';
+    el.style.border = '1px solid ' + (ok ? '#065f46' : '#7f1d1d');
+    el.style.background = ok ? 'rgba(16,185,129,.12)' : 'rgba(220,38,38,.12)';
+    el.style.color = ok ? '#a7f3d0' : '#fecaca';
+    el.style.borderRadius = '10px';
+    el.textContent = message;
+    container.appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
+
+async function initForms() {
+    qs('vhost-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const domain = document.getElementById('vhost-domain').value;
-        const framework = document.getElementById('vhost-framework').value;
-        createVhost(domain, framework);
-        document.getElementById('vhost-modal').classList.add('hidden');
+        const form = e.target;
+        const payload = {
+            domain: qs('#vhost-domain').value,
+            root: qs('#vhost-root').value,
+            framework: qs('#vhost-framework').value,
+        };
+        try {
+            const data = await API.post('/api/vhosts', payload);
+            showToast(data.message, data.success);
+            form.reset();
+            qs('vhost-modal')?.classList.add('hidden');
+            loadVhosts();
+        } catch (err) {
+            showToast(err.message, false);
+        }
     });
 
-    // SSL local form
-    document.getElementById('ssl-local-form')?.addEventListener('submit', (e) => {
+    qs('ssl-local-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const domain = document.getElementById('ssl-local-domain').value;
-        createLocalSsl(domain);
+        try {
+            const data = await API.post('/api/ssl/local', { domain: qs('#ssl-local-domain').value });
+            showToast(data.message, data.success);
+            e.target.reset();
+            loadSsl();
+        } catch (err) {
+            showToast(err.message, false);
+        }
     });
 
-    // SSL letsencrypt form
-    document.getElementById('ssl-letsencrypt-form')?.addEventListener('submit', (e) => {
+    qs('ssl-letsencrypt-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const domain = document.getElementById('ssl-le-domain').value;
-        const email = document.getElementById('ssl-le-email').value;
-        createLetsEncryptSsl(domain, email, 'standalone');
+        try {
+            const data = await API.post('/api/ssl/letsencrypt', {
+                domain: qs('#ssl-le-domain').value,
+                email: qs('#ssl-le-email').value,
+            });
+            showToast(data.message, data.success);
+            e.target.reset();
+            loadSsl();
+        } catch (err) {
+            showToast(err.message, false);
+        }
     });
 
-    // RDS form
-    document.getElementById('rds-form')?.addEventListener('submit', (e) => {
+    qs('rds-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const ec2Host = document.getElementById('rds-ec2-host').value;
-        const ec2User = document.getElementById('rds-ec2-user').value;
-        const ec2KeyPath = document.getElementById('rds-ec2-key').value;
-        const rdsHost = document.getElementById('rds-rds-host').value;
-        const rdsPort = parseInt(document.getElementById('rds-rds-port').value) || 3306;
-        const localPort = parseInt(document.getElementById('rds-local-port').value) || 3307;
-        startRdsTunnel(ec2Host, ec2User, ec2KeyPath, rdsHost, rdsPort, localPort);
+        const btn = e.target.querySelector('button[type="submit"]');
+        setButtonLoading(btn, true);
+        try {
+            const data = await API.post('/api/rds/tunnel/start', {
+                ec2_host: qs('#rds-ec2-host').value,
+                ec2_user: qs('#rds-ec2-user').value,
+                ec2_key_path: qs('#rds-ec2-key').value,
+                rds_host: qs('#rds-rds-host').value,
+                rds_port: qs('#rds-rds-port').value,
+                local_port: qs('#rds-local-port').value,
+            });
+            showToast(data.message, data.success);
+        } catch (err) {
+            showToast(err.message, false);
+        } finally {
+            setButtonLoading(btn, false);
+        }
     });
 
-    document.getElementById('rds-stop-btn')?.addEventListener('click', stopRdsTunnel);
-
-    // Backup form
-    document.getElementById('create-backup-btn')?.addEventListener('click', () => {
-        document.getElementById('backup-modal').classList.remove('hidden');
-    });
-
-    document.getElementById('backup-form')?.addEventListener('submit', (e) => {
+    qs('backup-form')?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const database = document.getElementById('backup-database').value || 'all';
-        const description = document.getElementById('backup-description').value;
-        createBackup(database, description);
-        document.getElementById('backup-modal').classList.add('hidden');
+        try {
+            const data = await API.post('/api/backup', {
+                database: qs('#backup-database').value,
+                description: qs('#backup-description').value,
+            });
+            showToast(data.message, data.success);
+            e.target.reset();
+            qs('backup-modal')?.classList.add('hidden');
+            loadBackups();
+        } catch (err) {
+            showToast(err.message, false);
+        }
     });
+}
 
-    // Restore confirm
-    document.getElementById('restore-confirm-btn')?.addEventListener('click', () => {
-        const backupId = document.getElementById('restore-backup-id').textContent;
-        const database = document.getElementById('restore-database').value || null;
-        restoreBackup(backupId);
-        document.getElementById('restore-modal').classList.add('hidden');
-    });
-
-    // Modal close buttons
-    document.querySelectorAll('.modal-close, .modal-cancel').forEach(btn => {
+/* ────────────────────────────────────
+   Modals
+   ──────────────────────────────────── */
+function initModals() {
+    document.querySelectorAll('.modal-close, .modal-cancel').forEach((btn) => {
         btn.addEventListener('click', () => {
-            btn.closest('.modal').classList.add('hidden');
+            btn.closest('.modal')?.classList.add('hidden');
         });
     });
+    qs('#add-vhost-btn')?.addEventListener('click', () => qs('#vhost-modal')?.classList.remove('hidden'));
+    qs('#create-backup-btn')?.addEventListener('click', () => qs('#backup-modal')?.classList.remove('hidden'));
+}
 
-    // Dismiss banner
-    document.getElementById('dismiss-banner')?.addEventListener('click', () => {
-        document.getElementById('daemon-banner').classList.add('hidden');
+/* ────────────────────────────────────
+   Theme
+   ──────────────────────────────────── */
+function initThemeToggle() {
+    qs('#theme-toggle')?.addEventListener('click', async () => {
+        document.body.style.filter = document.body.style.filter ? '' : 'invert(1) hue-rotate(180deg)';
     });
+}
 
-    // Logs clear
-    document.getElementById('logs-clear-btn')?.addEventListener('click', () => {
-        document.getElementById('logs-viewer').textContent = '';
+function initLogout() {
+    const form = qs('#logout-form');
+    qs('#logout-btn')?.addEventListener('click', async () => {
+        if (!form) return;
+        const btn = qs('#logout-btn');
+        btn.disabled = true;
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    'X-CSRF-TOKEN': form.querySelector('input[name="_token"]')?.value || ''
+                }
+            });
+            const data = await res.json();
+            if (data.redirect) {
+                location.href = data.redirect;
+            }
+        } catch (e) {
+            btn.disabled = false;
+        }
     });
+}
+
+/* ────────────────────────────────────
+   Boot
+   ──────────────────────────────────── */
+Splash.init();
+Splash.setStatus('Checking API...');
+Splash.setProgress(20);
+
+addEventListener('DOMContentLoaded', async () => {
+    await initHealth();
+    Splash.setStatus('Loading services...');
+    Splash.setProgress(45);
+    await loadServices();
+    Splash.setStatus('Loading virtual hosts...');
+    Splash.setProgress(65);
+    await loadVhosts();
+    Splash.setStatus('Loading SSL certificates...');
+    Splash.setProgress(80);
+    await loadSsl();
+    Splash.setStatus('Preparing interface...');
+    Splash.setProgress(95);
+    await initForms();
+    await initLogStream();
+    await initRdsStatus();
+    await initThemeToggle();
+    initLogout();
+    initModals();
+    await loadBackups();
+    Splash.setProgress(100);
+    Splash.dispose();
+
+    initEventStream();
 });

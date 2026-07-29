@@ -1,45 +1,38 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\BackupController;
+use App\Http\Controllers\EventController;
+use App\Http\Controllers\HealthController;
+use App\Http\Controllers\LogController;
+use App\Http\Controllers\RdsTunnelController;
+use App\Http\Controllers\ServiceController;
+use App\Http\Controllers\SslController;
+use App\Http\Controllers\VhostController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| All /api/* routes for the DStack panel. Prefixed automatically by
-| RouteServiceProvider with /api.
-|
-*/
+Route::middleware(['auth'])->group(function () {
+    Route::get('/health', [HealthController::class, 'index']);
 
-// Health check
-Route::get('/health', [App\Http\Controllers\HealthController::class, 'index']);
+    Route::get('/services', [ServiceController::class, 'index']);
+    Route::post('/services/{service}/{action}', [ServiceController::class, 'action']);
 
-// Services
-Route::get('/services', [App\Http\Controllers\ServiceController::class, 'index']);
-Route::post('/services/{service}/{action}', [App\Http\Controllers\ServiceController::class, 'action']);
+    Route::get('/vhosts', [VhostController::class, 'index']);
+    Route::post('/vhosts', [VhostController::class, 'store']);
+    Route::delete('/vhosts/{domain}', [VhostController::class, 'destroy']);
 
-// Virtual hosts
-Route::get('/vhosts', [App\Http\Controllers\VhostController::class, 'index']);
-Route::post('/vhosts', [App\Http\Controllers\VhostController::class, 'store']);
-Route::delete('/vhosts/{domain}', [App\Http\Controllers\VhostController::class, 'destroy']);
+    Route::get('/ssl', [SslController::class, 'index']);
+    Route::post('/ssl/local', [SslController::class, 'createLocal']);
+    Route::post('/ssl/letsencrypt', [SslController::class, 'createLetsEncrypt']);
 
-// SSL certificates
-Route::get('/ssl', [App\Http\Controllers\SslController::class, 'index']);
-Route::get('/ssl/certs', [App\Http\Controllers\SslController::class, 'index']);
-Route::post('/ssl/local', [App\Http\Controllers\SslController::class, 'createLocal']);
-Route::post('/ssl/letsencrypt', [App\Http\Controllers\SslController::class, 'createLetsEncrypt']);
+    Route::post('/rds/tunnel/start', [RdsTunnelController::class, 'start']);
+    Route::post('/rds/tunnel/stop', [RdsTunnelController::class, 'stop']);
+    Route::get('/rds/tunnel/status', [RdsTunnelController::class, 'status']);
 
-// RDS tunnel
-Route::post('/rds/tunnel/start', [App\Http\Controllers\RdsTunnelController::class, 'start']);
-Route::post('/rds/tunnel/stop', [App\Http\Controllers\RdsTunnelController::class, 'stop']);
-Route::get('/rds/tunnel/status', [App\Http\Controllers\RdsTunnelController::class, 'status']);
+    Route::get('/logs/{service}', [LogController::class, 'index']);
+    Route::get('/logs/{service}/stream', [LogController::class, 'stream']);
 
-// Logs
-Route::get('/logs/{service}', [App\Http\Controllers\LogController::class, 'index']);
-Route::get('/logs/{service}/stream', [App\Http\Controllers\LogController::class, 'stream']);
+    Route::post('/backup', [BackupController::class, 'create']);
+    Route::get('/backups', [BackupController::class, 'index']);
+    Route::post('/restore', [BackupController::class, 'restore']);
 
-// Backups
-Route::post('/backup', [App\Http\Controllers\BackupController::class, 'create']);
-Route::get('/backups', [App\Http\Controllers\BackupController::class, 'index']);
-Route::post('/restore', [App\Http\Controllers\BackupController::class, 'restore']);
+    Route::get('/events', [EventController::class, 'stream'])->withoutMiddleware(['throttle:api']);
+});

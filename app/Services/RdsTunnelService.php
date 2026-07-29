@@ -3,12 +3,11 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Config;
-use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 class RdsTunnelService
 {
-    protected string $tunnelPidFile;
+    protected ?string $tunnelPidFile = null;
 
     public function __construct()
     {
@@ -26,8 +25,8 @@ class RdsTunnelService
         $this->disconnect();
 
         $keyPath = $ec2KeyPath;
-        if (!str_starts_with($keyPath, '/')) {
-            $keyPath = getenv('HOME') . '/' . $keyPath;
+        if (! str_starts_with($keyPath, '/')) {
+            $keyPath = getenv('HOME').'/'.$keyPath;
         }
 
         $sshCmd = [
@@ -46,7 +45,7 @@ class RdsTunnelService
         if ($process->getExitCode() !== 0) {
             return [
                 'success' => false,
-                'message' => "SSH tunnel failed: " . trim($process->getErrorOutput() ?: $process->getOutput()),
+                'message' => 'SSH tunnel failed: '.trim($process->getErrorOutput() ?: $process->getOutput()),
                 'local_port' => $localPort,
                 'rds_host' => $rdsHost,
                 'rds_port' => $rdsPort,
@@ -119,9 +118,10 @@ class RdsTunnelService
 
         $pid = $pidData['pid'];
 
-        if (!posix_kill($pid, 0)) {
+        if (! posix_kill($pid, 0)) {
             // Process is dead, clean up
             $this->deletePidFile();
+
             return ['connected' => false, 'local_port' => $pidData['local_port'] ?? null, 'rds_host' => $pidData['rds_host'] ?? null, 'rds_port' => $pidData['rds_port'] ?? null];
         }
 
@@ -139,25 +139,25 @@ class RdsTunnelService
     protected function validateConnectParams(string $ec2Host, string $ec2User, string $ec2KeyPath, string $rdsHost, int $rdsPort, int $localPort): bool|string
     {
         foreach (['ec2_host' => $ec2Host, 'ec2_user' => $ec2User, 'rds_host' => $rdsHost] as $name => $val) {
-            if (empty($val) || !is_string($val)) {
+            if (empty($val) || ! is_string($val)) {
                 return "{$name} must be a non-empty string";
             }
         }
 
-        if (empty($ec2KeyPath) || !is_string($ec2KeyPath)) {
+        if (empty($ec2KeyPath) || ! is_string($ec2KeyPath)) {
             return 'ec2_key_path must be a non-empty string';
         }
 
-        if (!file_exists($ec2KeyPath)) {
+        if (! file_exists($ec2KeyPath)) {
             return "ec2_key_path does not exist: {$ec2KeyPath}";
         }
 
-        if (!is_file($ec2KeyPath)) {
+        if (! is_file($ec2KeyPath)) {
             return "ec2_key_path is not a file: {$ec2KeyPath}";
         }
 
         foreach (['rds_port' => $rdsPort, 'local_port' => $localPort] as $name => $val) {
-            if (!is_int($val) || is_bool($val)) {
+            if (! is_int($val) || is_bool($val)) {
                 return "{$name} must be an integer";
             }
             if ($val < 1 || $val > 65535) {
@@ -171,7 +171,7 @@ class RdsTunnelService
     protected function writePidFile(int $pid, string $ec2Host, string $ec2User, string $rdsHost, int $rdsPort, int $localPort): void
     {
         $dir = dirname($this->tunnelPidFile);
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             mkdir($dir, 0755, true);
         }
 
@@ -190,7 +190,7 @@ class RdsTunnelService
 
     protected function readPidFile(): ?array
     {
-        if (!file_exists($this->tunnelPidFile)) {
+        if (! file_exists($this->tunnelPidFile)) {
             return null;
         }
 
@@ -200,6 +200,7 @@ class RdsTunnelService
         }
 
         $data = json_decode($content, true);
+
         return is_array($data) ? $data : null;
     }
 

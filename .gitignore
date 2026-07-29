@@ -1,231 +1,126 @@
-# Environment files (secrets)
-.env
-.env.local
-.env.*.local
-server/.env
-cloud/config.env
-cloud/.env
+# ===== OS / Editors =====
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.~lock.*
+*.tmp
+*.bak
+*.orig
 
-# Python cache and bytecode
+# ===== IDEs & Tooling =====
+/.fleet
+/.idea
+/.nova
+/.phpactor.json
+/.phpunit.cache
+/.phpunit.result.cache
+/.vscode
+/.zed
+/.claude
+/.agents
+/.kiro
+/.kilocode
+/.kilo
+auth.json
+
+# ===== PHP / Composer =====
+/vendor
+composer
+composer-setup.php
+composer-setup.php.sig
+/.php-cs-fixer.cache
+/phpunit-result.xml
+
+# ===== Node / Bun =====
+/node_modules
+bun.lock
+bun.lockb
+/.bun
+/webpack.mix.cache
+/package-lock.json
+/yarn.lock
+/pnpm-lock.yaml
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ===== Laravel =====
+/.env
+/.env.*
+!.env.example
+/auth.json
+/public/build
+/public/hot
+/public/storage
+/public/assets
+/storage/*.key
+/storage/pail
+/storage/database/*.db
+/storage/tunnel.pid
+/storage/framework/views/*.php
+/storage/framework/cache/*
+/storage/logs/*.log
+/storage/framework/sessions/*
+/bootstrap/cache/*.php
+
+# ===== Docker =====
+docker/.env
+docker/ssl/*
+docker/vhosts/*
+docker/data/*
+!docker/.env.example
+!docker/ssl/.gitkeep
+!docker/vhosts/.gitkeep
+
+# ===== Cloud =====
+cloud/config.env
+!cloud/config.env.example
+
+# ===== Python =====
+/venv
 __pycache__/
 *.py[cod]
-*$py.class
-.pytest_cache/
+*.pyo
+*.pyd
+.Python
+
+# ===== Test / Coverage =====
+/coverage
 .coverage
-.tox/
-.mypy_cache/
-.pytype/
-
-# Python virtual environments
-venv/
-env/
-.venv/
-ENV/
-
-# Logs
-*.log
-devstack.log
-logs/
-server/logs/
-*.log.*
-
-# Backups and dumps
-backups/
-backups_*/
-*.sql
-*.sql.gz
-*.tar.gz
-*.bak
-*.backup
-*.dump
-db_dumps/
-db_dumps_*/
-
-# Generated SSL certificates and keys
-docker/ssl/
-docker/ssl/*
-docker/vhosts/*.conf
-docker/vhosts/*.conf.bak
-!docker/vhosts/.gitkeep
-!docker/vhosts/*.conf.example
-!docker/vhosts/*.conf.example
-
-# Docker generated
-docker/data/
-docker/mysql-data/
-docker/redis-data/
-
-# IDE and editor files
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-*.sublime-project
-*.sublime-workspace
-
-# OS files
-.DS_Store
-Thumbs.db
-ehthumbs.db
-Desktop.ini
-
-# Node.js (if any frontend build)
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# Build outputs
-dist/
-build/
-*.egg-info/
-*.egg/
-
-# Coverage reports
-htmlcov/
-.coverage
+.coverage.*
 coverage.xml
-
-# Test artifacts
-.testrepository/
-test-results/
-*.prof
-
-# Database files
-*.sqlite
-*.sqlite3
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# IDE/Editor specific
-*.swp
-*.swo
-*~
-.vscode/*
-!.vscode/extensions.json
-.idea/*
-!.idea/runConfigurations/
-
-# OS generated files
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
-
-# Logs (additional)
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-
-# Backup files
-*.bak
-*.backup
-*~
-
-# Docker volumes (data)
-volumes/
-data/
-
-# IDE specific
-*.sublime-workspace
-*.sublime-project
-
-# Python specific
-*.egg
-*.egg-info/
-dist/
-build/
-*.manifest
-*.spec
-
-# Testing
-.tox/
-.nox/
-.hypothesis/
-
-# Documentation builds
-docs/_build/
-site/
-
-# Cloud/Deployment
-.terraform/
-*.tfstate
-*.tfstate.*
-*.tfvars
-*.tfvars.json
-*.pem
-*.key
-*.crt
-*.p12
-*.pfx
-
-# IDE/Editor
-.vscode/settings.json
-.vscode/launch.json
-.idea/workspace.xml
-.idea/tasks.xml
-.idea/usage.statistics.xml
-.idea/dictionaries/
-.idea/shelf/
-
-# ──────────────────────────────────────────────
-# DSTACK PANEL SPECIFIC
-# ──────────────────────────────────────────────
-
-# Laravel storage
-storage/database/*.db
-storage/database/*.db-journal
-storage/database/*.db-wal
-storage/framework/cache/
-storage/framework/sessions/
-storage/framework/views/
-storage/framework/testing/
-storage/logs/
-storage/app/private/
-storage/app/public/
-
-# Bootstrap cache
-bootstrap/cache/*.php
-!bootstrap/cache/.gitkeep
-
-# Tunnel PID file
-storage/tunnel.pid
-
-# Public assets (compiled)
-public/assets/
-public/css/
-public/js/
-public/mix-manifest.json
-public/hot
-
-# Laravel vendor
-vendor/
-
-# Composer
-composer.phar
-
-# Environment
-.env
-.env.backup
-
-# IDE - Laravel specific
-.phpstorm.meta.php
-_ide_helper.php
-_ide_helper_models.php
-
-# Testing
-phpunit.xml
+htmlcov/
+.phpunit.cache
 .phpunit.result.cache
 
-# Sail
-docker-compose.override.yml
+# ===== Archives & Builds =====
+*.tar.gz
+*.zip
+*.7z
+*.rar
+dist/
+build/
+out/
+
+# ===== Project-specific =====
+devstack.log
+/old
+!old/.gitkeep
+/backups
+/backup-cron.log
+/opt
+
+# ===== Misc =====
+*.db
+*.sqlite
+*.sqlite3
+*.pid
+*.sock
+*.seed
+*.pid.lock
+*.swo
+.gitignore.bak
+cookies.txt
+2026-07-26-Open PR for Fixed Code-Kimi Chat Export.md

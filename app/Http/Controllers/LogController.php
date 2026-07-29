@@ -11,14 +11,15 @@ class LogController extends Controller
     {
         $lines = request()->query('lines', 50);
         $result = $log->getLogs($service, (int) $lines);
-        return response()->json($result, $result['success'] ? 200 : 400);
+
+        return response()->json($result);
     }
 
     public function stream(string $service, LogService $log): JsonResponse
     {
-        // Polling endpoint - same as snapshot, no SSE
         $lines = request()->query('lines', 50);
         $result = $log->getLogs($service, (int) $lines);
-        return response()->json($result, $result['success'] ? 200 : 400);
+
+        return response()->json($result);
     }
 }

@@ -5,7 +5,7 @@
 # It invokes the BackupManager CLI directly (no Flask server required).
 #
 # Recommended crontab entry (runs daily at 03:00 UTC):
-#   0 3 * * * /path/to/DStack/cloud/backup-cron.sh >> /var/log/devstack-backup.log 2>&1
+#   0 3 * * * /path/to/devstack-manager/cloud/backup-cron.sh >> /var/log/devstack-backup.log 2>&1
 #
 # Adjust the path and schedule as needed. Ensure the cron user has:
 #   - Access to the Docker daemon (docker group or sudo)

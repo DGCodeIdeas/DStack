@@ -12,6 +12,8 @@ class ServiceControllerTest extends TestCase
 
     public function test_index_returns_service_status(): void
     {
+        $this->actingAsUser();
+
         $docker = $this->createMock(DockerComposeService::class);
         $docker->method('getAllStatus')->willReturn([
             'nginx' => ['status' => 'Up 2 hours', 'state' => 'running', 'health' => 'healthy'],
@@ -33,6 +35,8 @@ class ServiceControllerTest extends TestCase
 
     public function test_action_start_returns_success_with_status(): void
     {
+        $this->actingAsUser();
+
         $docker = $this->createMock(DockerComposeService::class);
         $docker->method('start')->willReturn(['success' => true, 'message' => 'OK']);
         $docker->method('getAllStatus')->willReturn([
@@ -53,6 +57,8 @@ class ServiceControllerTest extends TestCase
 
     public function test_action_invalid_service_returns_400(): void
     {
+        $this->actingAsUser();
+
         $docker = $this->createMock(DockerComposeService::class);
 
         $this->app->instance(DockerComposeService::class, $docker);
@@ -67,6 +73,8 @@ class ServiceControllerTest extends TestCase
 
     public function test_action_invalid_action_returns_400(): void
     {
+        $this->actingAsUser();
+
         $docker = $this->createMock(DockerComposeService::class);
 
         $this->app->instance(DockerComposeService::class, $docker);

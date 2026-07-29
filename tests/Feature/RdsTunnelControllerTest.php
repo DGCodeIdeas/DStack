@@ -12,6 +12,8 @@ class RdsTunnelControllerTest extends TestCase
 
     public function test_start_returns_400_for_missing_params(): void
     {
+        $this->actingAsUser();
+
         $tunnel = $this->createMock(RdsTunnelService::class);
         $tunnel->method('connect')->willReturn([
             'success' => false,
@@ -32,6 +34,8 @@ class RdsTunnelControllerTest extends TestCase
 
     public function test_stop_returns_success(): void
     {
+        $this->actingAsUser();
+
         $tunnel = $this->createMock(RdsTunnelService::class);
         $tunnel->method('disconnect')->willReturn([
             'success' => true,
@@ -51,6 +55,8 @@ class RdsTunnelControllerTest extends TestCase
 
     public function test_status_returns_disconnected_when_no_tunnel(): void
     {
+        $this->actingAsUser();
+
         $tunnel = $this->createMock(RdsTunnelService::class);
         $tunnel->method('getStatus')->willReturn([
             'connected' => false,

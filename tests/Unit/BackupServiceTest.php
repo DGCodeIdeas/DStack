@@ -7,42 +7,42 @@ use PHPUnit\Framework\TestCase;
 
 class BackupServiceTest extends TestCase
 {
-    public function testValidateDbNameAll(): void
+    public function test_validate_db_name_all(): void
     {
         $this->assertTrue(BackupService::validateDbName('all'));
     }
 
-    public function testValidateDbNameEmpty(): void
+    public function test_validate_db_name_empty(): void
     {
         $this->assertTrue(BackupService::validateDbName(''));
     }
 
-    public function testValidateDbNameNull(): void
+    public function test_validate_db_name_null(): void
     {
         $this->assertTrue(BackupService::validateDbName(null));
     }
 
-    public function testValidateDbNameValid(): void
+    public function test_validate_db_name_valid(): void
     {
         $this->assertTrue(BackupService::validateDbName('my_database'));
     }
 
-    public function testValidateDbNameValidSimple(): void
+    public function test_validate_db_name_valid_simple(): void
     {
         $this->assertTrue(BackupService::validateDbName('app_db'));
     }
 
-    public function testValidateDbNameInvalid(): void
+    public function test_validate_db_name_invalid(): void
     {
         $this->assertFalse(BackupService::validateDbName('my db'));
     }
 
-    public function testValidateDbNameInvalidSpecialChars(): void
+    public function test_validate_db_name_invalid_special_chars(): void
     {
         $this->assertFalse(BackupService::validateDbName('my-db'));
     }
 
-    public function testValidateDbNameInvalidSemicolon(): void
+    public function test_validate_db_name_invalid_semicolon(): void
     {
         $this->assertFalse(BackupService::validateDbName('app; DROP TABLE'));
     }

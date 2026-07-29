@@ -8,10 +8,14 @@ use Symfony\Component\Process\Process;
 
 class SslService
 {
-    protected string $root;
-    protected string $sslDir;
-    protected string $vhostsDir;
-    protected string $nginxContainer;
+    protected ?string $root = null;
+
+    protected ?string $sslDir = null;
+
+    protected ?string $vhostsDir = null;
+
+    protected ?string $nginxContainer = null;
+
     protected int $timeout;
 
     public function __construct()
@@ -20,17 +24,17 @@ class SslService
         $this->sslDir = Config::get('dstack.ssl_dir');
         $this->vhostsDir = Config::get('dstack.vhosts_dir');
         $this->nginxContainer = Config::get('dstack.nginx_container');
-        $this->timeout = Config::get('dstack.ssl_timeout');
+        $this->timeout = Config::get('dstack.ssl_timeout', 120);
     }
 
     public function createMkcert(string $domain): array
     {
         [$ok, $err] = VhostService::validateDomain($domain);
-        if (!$ok) {
+        if (! $ok) {
             return ['success' => false, 'domain' => $domain, 'message' => $err];
         }
 
-        if (!self::commandExists('mkcert')) {
+        if (! self::commandExists('mkcert')) {
             return [
                 'success' => false,
                 'domain' => $domain,
@@ -38,13 +42,13 @@ class SslService
             ];
         }
 
-        $certPath = $this->sslDir . '/' . $domain . '.pem';
-        $keyPath = $this->sslDir . '/' . $domain . '-key.pem';
+        $certPath = $this->sslDir.'/'.$domain.'.pem';
+        $keyPath = $this->sslDir.'/'.$domain.'-key.pem';
 
         $cmd = ['mkcert', '-cert-file', $certPath, '-key-file', $keyPath, $domain, 'localhost', '127.0.0.1'];
         $result = $this->runProcess($cmd);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return [
                 'success' => false,
                 'domain' => $domain,
@@ -71,15 +75,15 @@ class SslService
     public function createLetsEncrypt(string $domain, string $email, string $mode = 'standalone', ?string $webrootPath = null): array
     {
         [$ok, $err] = VhostService::validateDomain($domain);
-        if (!$ok) {
+        if (! $ok) {
             return ['success' => false, 'domain' => $domain, 'message' => $err];
         }
 
-        if (empty($email) || !str_contains($email, '@')) {
+        if (empty($email) || ! str_contains($email, '@')) {
             return ['success' => false, 'domain' => $domain, 'message' => "A valid 'email' is required for Let's Encrypt registration"];
         }
 
-        if (!self::commandExists('certbot')) {
+        if (! self::commandExists('certbot')) {
             return [
                 'success' => false,
                 'domain' => $domain,
@@ -97,17 +101,17 @@ class SslService
         }
 
         $result = $this->runProcess($cmd);
-        if (!$result['success']) {
+        if (! $result['success']) {
             return ['success' => false, 'domain' => $domain, 'message' => "certbot failed: {$result['message']}"];
         }
 
-        $liveDir = '/etc/letsencrypt/live/' . $domain;
-        $srcCert = $liveDir . '/fullchain.pem';
-        $srcKey = $liveDir . '/privkey.pem';
-        $certPath = $this->sslDir . '/' . $domain . '.pem';
-        $keyPath = $this->sslDir . '/' . $domain . '-key.pem';
+        $liveDir = '/etc/letsencrypt/live/'.$domain;
+        $srcCert = $liveDir.'/fullchain.pem';
+        $srcKey = $liveDir.'/privkey.pem';
+        $certPath = $this->sslDir.'/'.$domain.'.pem';
+        $keyPath = $this->sslDir.'/'.$domain.'-key.pem';
 
-        if (!@copy($srcCert, $certPath) || !@copy($srcKey, $keyPath)) {
+        if (! @copy($srcCert, $certPath) || ! @copy($srcKey, $keyPath)) {
             return [
                 'success' => false,
                 'domain' => $domain,
@@ -134,21 +138,21 @@ class SslService
     public function enableVhostSsl(string $domain, bool $redirectHttp = true): array
     {
         [$ok, $err] = VhostService::validateDomain($domain);
-        if (!$ok) {
+        if (! $ok) {
             return ['success' => false, 'domain' => $domain, 'message' => $err];
         }
 
-        $configPath = $this->vhostsDir . '/' . $domain . '.conf';
-        if (!file_exists($configPath)) {
+        $configPath = $this->vhostsDir.'/'.$domain.'.conf';
+        if (! file_exists($configPath)) {
             return ['success' => false, 'domain' => $domain, 'config_path' => $configPath, 'message' => "No vhost config found at {$configPath}"];
         }
 
         $content = file_get_contents($configPath);
         if ($content === false) {
-            return ['success' => false, 'domain' => $domain, 'config_path' => $configPath, 'message' => "Could not read vhost config"];
+            return ['success' => false, 'domain' => $domain, 'config_path' => $configPath, 'message' => 'Could not read vhost config'];
         }
 
-        $root = '/var/www/projects/' . $domain;
+        $root = '/var/www/projects/'.$domain;
         $tryFiles = 'try_files $uri $uri/ =404;';
 
         if (preg_match('/^\s*root\s+([^;]+);/m', $content, $m)) {
@@ -168,23 +172,23 @@ class SslService
 
         $httpsBlock = self::renderSslServerBlock(
             $domain,
-            $this->sslDir . '/' . $domain . '.pem',
-            $this->sslDir . '/' . $domain . '-key.pem',
+            $this->sslDir.'/'.$domain.'.pem',
+            $this->sslDir.'/'.$domain.'-key.pem',
             $root,
             $tryFiles
         );
 
-        if (!str_ends_with($content, "\n")) {
+        if (! str_ends_with($content, "\n")) {
             $content .= "\n";
         }
-        $content = rtrim($content, "\n") . "\n\n" . $httpsBlock;
+        $content = rtrim($content, "\n")."\n\n".$httpsBlock;
 
         if ($redirectHttp) {
             $content = self::injectHttpRedirect($content, $domain);
         }
 
         if (@file_put_contents($configPath, $content) === false) {
-            return ['success' => false, 'domain' => $domain, 'config_path' => $configPath, 'message' => "Could not write vhost config"];
+            return ['success' => false, 'domain' => $domain, 'config_path' => $configPath, 'message' => 'Could not write vhost config'];
         }
 
         $warnings = $this->reloadNginx();
@@ -202,17 +206,17 @@ class SslService
     public function listCerts(): array
     {
         $results = [];
-        if (!is_dir($this->sslDir)) {
+        if (! is_dir($this->sslDir)) {
             return $results;
         }
 
-        foreach (glob($this->sslDir . '/*.pem') as $cert) {
+        foreach (glob($this->sslDir.'/*.pem') as $cert) {
             $name = basename($cert);
             if (str_ends_with($name, '-key.pem')) {
                 continue;
             }
             $domain = substr($name, 0, -strlen('.pem'));
-            $key = $this->sslDir . '/' . $domain . '-key.pem';
+            $key = $this->sslDir.'/'.$domain.'-key.pem';
             $results[] = [
                 'domain' => $domain,
                 'cert_path' => $cert,
@@ -226,7 +230,7 @@ class SslService
 
     public static function renderSslServerBlock(string $domain, string $certPath, string $keyPath, string $root, string $tryFiles): string
     {
-        return <<<'SSL'
+        $template = <<<'SSL'
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
@@ -254,26 +258,33 @@ server {
     }
 }
 SSL;
+
+        return str_replace(
+            ['{domain}', '{cert_path}', '{key_path}', '{root}', '{try_files}'],
+            [$domain, $certPath, $keyPath, $root, $tryFiles],
+            $template
+        );
     }
 
     public static function removeHttpsBlock(string $content): string
     {
-        $blocks = $this->extractServerBlocks($content);
+        $blocks = self::extractServerBlocks($content);
         foreach (array_reverse($blocks) as [$start, $end, $block]) {
             if (preg_match('/^\s*listen\s+443/m', $block)) {
-                $content = substr($content, 0, $start) . substr($content, $end);
+                $content = substr($content, 0, $start).substr($content, $end);
             }
         }
+
         return $content;
     }
 
     public static function injectHttpRedirect(string $content, string $domain): string
     {
-        $blocks = $this->extractServerBlocks($content);
+        $blocks = self::extractServerBlocks($content);
         foreach ($blocks as [$start, $end, $block]) {
             $isHttp = preg_match('/^\s*listen\s+80\b/m', $block);
             $isHttps = preg_match('/^\s*listen\s+443/m', $block);
-            if ($isHttp && !$isHttps) {
+            if ($isHttp && ! $isHttps) {
                 $sn = preg_match('/server_name\s+([^;]+);/', $block, $m);
                 if ($sn && str_contains($m[1], $domain)) {
                     $redirect = '        return 301 https://$host$request_uri;';
@@ -283,11 +294,12 @@ SSL;
                         $block,
                         1
                     );
-                    $content = substr($content, 0, $start) . $newBlock . substr($content, $end);
+                    $content = substr($content, 0, $start).$newBlock.substr($content, $end);
                     break;
                 }
             }
         }
+
         return $content;
     }
 
@@ -320,6 +332,7 @@ SSL;
             $blocks[] = [$start, $end, substr($content, $start, $end - $start)];
             $i = $end;
         }
+
         return $blocks;
     }
 
@@ -327,18 +340,19 @@ SSL;
     {
         $warnings = [];
         try {
-            $docker = new DockerComposeService();
+            $docker = new DockerComposeService;
             $cmd = array_merge(
                 $docker->baseCommand(),
                 ['exec', $this->nginxContainer, 'nginx', '-s', 'reload']
             );
             $result = $docker->run($cmd);
-            if (!$result['success']) {
+            if (! $result['success']) {
                 $warnings[] = "nginx reload failed: {$result['message']}";
             }
         } catch (\Throwable $e) {
             $warnings[] = "nginx reload could not be attempted: {$e->getMessage()}";
         }
+
         return $warnings;
     }
 
@@ -349,7 +363,7 @@ SSL;
             $process->setTimeout($this->timeout);
             $process->run();
         } catch (ProcessTimedOutException $e) {
-            return ['success' => false, 'message' => "Command timed out after {$this->timeout}s: " . implode(' ', $cmd)];
+            return ['success' => false, 'message' => "Command timed out after {$this->timeout}s: ".implode(' ', $cmd)];
         } catch (\Exception $e) {
             return ['success' => false, 'message' => "OS error running command: {$e->getMessage()}"];
         }
@@ -359,6 +373,7 @@ SSL;
 
         if ($process->getExitCode() !== 0) {
             $detail = trim($stderr ?: $stdout) ?: "Command failed (exit {$process->getExitCode()})";
+
             return ['success' => false, 'message' => $detail, 'stdout' => $stdout, 'stderr' => $stderr];
         }
 
@@ -370,6 +385,7 @@ SSL;
         $process = new Process(['which', $cmd]);
         $process->setTimeout(5);
         $process->run();
+
         return $process->isSuccessful();
     }
 }
