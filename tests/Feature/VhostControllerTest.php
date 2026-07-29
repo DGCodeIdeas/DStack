@@ -12,6 +12,8 @@ class VhostControllerTest extends TestCase
 
     public function test_index_returns_vhost_list(): void
     {
+        $this->actingAsUser();
+
         $vhost = $this->createMock(VhostService::class);
         $vhost->method('listAll')->willReturn([
             ['domain' => 'example.local', 'framework' => 'php', 'root' => '/var/www/projects/example.local'],
@@ -29,6 +31,8 @@ class VhostControllerTest extends TestCase
 
     public function test_store_creates_vhost(): void
     {
+        $this->actingAsUser();
+
         $vhost = $this->createMock(VhostService::class);
         $vhost->method('create')->willReturn([
             'success' => true,
@@ -54,6 +58,8 @@ class VhostControllerTest extends TestCase
 
     public function test_store_invalid_domain_returns_400(): void
     {
+        $this->actingAsUser();
+
         $vhost = $this->createMock(VhostService::class);
         $vhost->method('create')->willReturn([
             'success' => false,
@@ -72,6 +78,8 @@ class VhostControllerTest extends TestCase
 
     public function test_destroy_returns_404_for_missing_vhost(): void
     {
+        $this->actingAsUser();
+
         $vhost = $this->createMock(VhostService::class);
         $vhost->method('delete')->willReturn([
             'success' => false,
@@ -93,6 +101,8 @@ class VhostControllerTest extends TestCase
 
     public function test_destroy_returns_success(): void
     {
+        $this->actingAsUser();
+
         $vhost = $this->createMock(VhostService::class);
         $vhost->method('delete')->willReturn([
             'success' => true,

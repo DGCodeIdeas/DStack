@@ -2,8 +2,12 @@
 
 namespace App\Http\Requests;
 
-use Illuminate\Foundation\Http\FormRequest;
 use App\Services\BackupService;
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Translation\ArrayLoader;
+use Illuminate\Translation\Translator;
+use Illuminate\Validation\ValidationException;
 
 class CreateBackupRequest extends FormRequest
 {
@@ -23,12 +27,12 @@ class CreateBackupRequest extends FormRequest
     public function passedValidation(): void
     {
         $database = $this->input('database', 'all');
-        $service = new BackupService();
-        if (!$service::validateDbName($database)) {
-            throw new \Illuminate\Validation\ValidationException(
-                (new \Illuminate\Contracts\Validation\Validator(
-                    new \Illuminate\Translation\Translator(
-                        new \Illuminate\Translation\ArrayLoader(),
+        $service = new BackupService;
+        if (! $service::validateDbName($database)) {
+            throw new ValidationException(
+                (new Validator(
+                    new Translator(
+                        new ArrayLoader,
                         'en'
                     ),
                     ['database' => ['Invalid database name']],

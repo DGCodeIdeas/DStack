@@ -1,5 +1,8 @@
+# ===== Legacy single-instance service (kept for manual fallback) =====
+# The project now uses blue-green instances via dstack-panel@.service.
+# This legacy file documents the original single-instance configuration.
 [Unit]
-Description=DStack Laravel Panel
+Description=DStack Laravel Panel (legacy single-instance)
 After=network.target docker.service
 
 [Service]

@@ -8,10 +8,14 @@ use Symfony\Component\Process\Process;
 
 class DockerComposeService
 {
-    protected string $root;
-    protected string $composeFile;
-    protected string $envFile;
+    protected ?string $root = null;
+
+    protected ?string $composeFile = null;
+
+    protected ?string $envFile = null;
+
     protected int $timeout;
+
     protected array $dockerCmd;
 
     public function __construct()
@@ -19,7 +23,7 @@ class DockerComposeService
         $this->root = Config::get('dstack.root');
         $this->composeFile = Config::get('dstack.compose_file');
         $this->envFile = Config::get('dstack.env_file');
-        $this->timeout = Config::get('dstack.compose_timeout');
+        $this->timeout = Config::get('dstack.compose_timeout', 60);
         $this->dockerCmd = $this->detectDockerCommand();
     }
 
@@ -34,6 +38,7 @@ class DockerComposeService
         if ($this->canRun(['docker', 'version'])) {
             return ['docker', 'compose'];
         }
+
         return ['docker', 'compose'];
     }
 
@@ -43,6 +48,7 @@ class DockerComposeService
             $process = new Process($cmd);
             $process->setTimeout(10);
             $process->run();
+
             return $process->isSuccessful();
         } catch (\Exception $e) {
             return false;
@@ -68,7 +74,7 @@ class DockerComposeService
         } catch (ProcessTimedOutException $e) {
             return [
                 'success' => false,
-                'message' => "Command timed out after {$this->timeout}s: " . implode(' ', $cmd),
+                'message' => "Command timed out after {$this->timeout}s: ".implode(' ', $cmd),
                 'stdout' => '',
                 'stderr' => '',
             ];
@@ -86,6 +92,7 @@ class DockerComposeService
 
         if ($process->getExitCode() !== 0) {
             $detail = trim($stderr ?: $stdout) ?: "Command failed (exit {$process->getExitCode()})";
+
             return [
                 'success' => false,
                 'message' => $detail,
@@ -107,7 +114,7 @@ class DockerComposeService
         $cmd = array_merge($this->baseCommand(), ['ps', '--format', 'json']);
         $result = $this->run($cmd);
 
-        if (!$result['success']) {
+        if (! $result['success']) {
             return ['error' => $result['message']];
         }
 
@@ -146,7 +153,7 @@ class DockerComposeService
                 continue;
             }
             $result = $this->stop($service);
-            if (!$result['success']) {
+            if (! $result['success']) {
                 $warnings[] = "Failed to stop {$service}: {$result['message']}";
             }
         }
@@ -162,15 +169,15 @@ class DockerComposeService
     {
         $knownServices = Config::get('dstack.known_services', ['nginx', 'php', 'mysql', 'phpmyadmin', 'redis', 'all']);
 
-        if (!in_array($service, $knownServices)) {
+        if (! in_array($service, $knownServices)) {
             return [
                 'success' => false,
-                'message' => "Unknown service '{$service}'. Valid services: " . implode(', ', $knownServices),
+                'message' => "Unknown service '{$service}'. Valid services: ".implode(', ', $knownServices),
             ];
         }
 
         $cmd = array_merge($this->baseCommand(), [$composeAction]);
-        if (!empty($extra)) {
+        if (! empty($extra)) {
             $cmd = array_merge($cmd, $extra);
         }
         if ($service !== 'all') {
@@ -210,46 +217,25 @@ class DockerComposeService
 
     public static function parsePsText(string $raw): array
     {
-        $lines = array_filter(explode("\n", trim($raw)), fn($l) => trim($l) !== '');
+        $lines = array_values(array_filter(explode("\n", trim($raw)), fn ($l) => trim($l) !== ''));
         if (count($lines) < 2) {
             return [];
         }
 
-        $headerLine = $lines[0];
-        $columns = [];
-        $cursor = 0;
-        foreach (preg_split('/\s+/', $headerLine) as $token) {
-            $start = strpos($headerLine, $token, $cursor);
-            $columns[] = [strtoupper($token), $start];
-            $cursor = $start + strlen($token);
-        }
-
-        $pos = array_column($columns, 1, 0);
-        if (!isset($pos['SERVICE']) || !isset($pos['STATUS'])) {
+        preg_match('/^(\S+).*?\s{2,}(.+)$/', trim($lines[0]), $headerMatches);
+        if (! isset($headerMatches[1], $headerMatches[2])) {
             return [];
         }
 
-        $slice = function (string $line, string $name) use ($columns, $pos): string {
-            $start = $pos[$name];
-            $end = null;
-            foreach ($columns as [$colName, $colStart]) {
-                if ($colStart > $start) {
-                    $end = $colStart;
-                    break;
-                }
-            }
-            return trim(substr($line, $start, $end !== null ? $end - $start : null));
-        };
-
         $entries = [];
         for ($i = 1; $i < count($lines); $i++) {
-            $line = $lines[$i];
-            if (trim($line) === '') {
+            $line = trim($lines[$i]);
+            if ($line === '') {
                 continue;
             }
-            $name = $slice($line, 'SERVICE');
-            if ($name !== '') {
-                $entries[] = ['Service' => $name, 'Status' => $slice($line, 'STATUS')];
+
+            if (preg_match('/^(\S+).*?\s{2,}(.+)$/', $line, $m)) {
+                $entries[] = ['Service' => $m[1], 'Status' => $m[2]];
             }
         }
 
@@ -260,7 +246,7 @@ class DockerComposeService
     {
         $status = [];
         foreach ($entries as $entry) {
-            if (!is_array($entry)) {
+            if (! is_array($entry)) {
                 continue;
             }
             $name = $entry['Service'] ?? $entry['Name'] ?? null;
@@ -300,6 +286,7 @@ class DockerComposeService
                 'health' => $health ?: null,
             ];
         }
+
         return $status;
     }
 }

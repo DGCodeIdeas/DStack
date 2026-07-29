@@ -2,11 +2,29 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DStack - Local Development Stack</title>
     <link rel="stylesheet" href="/assets/css/app.css">
 </head>
 <body>
+    <!-- Splash Screen -->
+    <div id="splash-screen" role="status" aria-live="polite">
+        <div class="splash-brand">
+            <svg class="splash-monogram" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="12 2 22 8.5 22 15.5 12 22 2 15.5 2 8.5 12 2"></polygon>
+                <line x1="12" y1="22" x2="12" y2="15.5"></line>
+                <polyline points="22 8.5 12 15.5 2 8.5"></polyline>
+            </svg>
+            <h1 class="splash-title">DStack</h1>
+            <p class="splash-subtitle">Local Development Stack</p>
+        </div>
+        <p id="splash-status" class="splash-status">Initializing...</p>
+        <div class="splash-progress-track">
+            <div id="splash-progress" class="splash-progress-bar"></div>
+        </div>
+    </div>
+
     <div class="app-container">
         <!-- Header -->
         <header class="app-header">
@@ -15,6 +33,16 @@
                 <span class="app-subtitle">Local Development Stack</span>
             </div>
             <div class="header-right">
+                <form id="logout-form" method="POST" action="/logout" class="hidden">
+                    <input type="hidden" name="_token" value="{{ csrf_token() }}">
+                </form>
+                <button id="logout-btn" class="btn btn-icon" aria-label="Logout" title="Logout">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                        <polyline points="16 17 21 12 16 7"></polyline>
+                        <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                </button>
                 <button id="theme-toggle" class="btn btn-icon" aria-label="Toggle theme" title="Toggle dark/light mode">
                     <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="5"></circle>
@@ -296,7 +324,7 @@
                 </div>
                 <div class="form-group">
                     <label for="vhost-root">Root Path (optional)</label>
-                    <input type="text" id="vhost-root" name="root" placeholder="/home/dgi/app/DStack/projects/myapp.local">
+                    <input type="text" id="vhost-root" name="root" placeholder="/home/dgi/devstack-manager/projects/myapp.local">
                     <span class="form-hint">Leave empty to auto-create in projects folder</span>
                 </div>
                 <div class="modal-actions">

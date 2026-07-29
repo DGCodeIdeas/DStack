@@ -11,6 +11,8 @@ class DashboardControllerTest extends TestCase
 
     public function test_index_returns_dashboard_view(): void
     {
+        $this->actingAsUser();
+
         $response = $this->get('/');
 
         $response->assertStatus(200);

@@ -12,6 +12,8 @@ class SslControllerTest extends TestCase
 
     public function test_index_returns_cert_list(): void
     {
+        $this->actingAsUser();
+
         $ssl = $this->createMock(SslService::class);
         $ssl->method('listCerts')->willReturn([
             ['domain' => 'example.local', 'cert_path' => '/opt/dstack-panel/docker/ssl/example.local.pem', 'key_path' => '/opt/dstack-panel/docker/ssl/example.local-key.pem', 'exists' => true],
@@ -29,6 +31,8 @@ class SslControllerTest extends TestCase
 
     public function test_create_local_returns_success(): void
     {
+        $this->actingAsUser();
+
         $ssl = $this->createMock(SslService::class);
         $ssl->method('createMkcert')->willReturn([
             'success' => true,
@@ -53,6 +57,8 @@ class SslControllerTest extends TestCase
 
     public function test_create_letsencrypt_returns_success(): void
     {
+        $this->actingAsUser();
+
         $ssl = $this->createMock(SslService::class);
         $ssl->method('createLetsEncrypt')->willReturn([
             'success' => true,

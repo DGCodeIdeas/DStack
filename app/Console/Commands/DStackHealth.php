@@ -8,6 +8,7 @@ use Symfony\Component\Process\Process;
 class DStackHealth extends Command
 {
     protected $signature = 'dstack:health';
+
     protected $description = 'Diagnostic health check for the DStack Panel';
 
     public function handle(): int
@@ -28,7 +29,7 @@ class DStackHealth extends Command
             $status = $result ? 'OK' : 'FAIL';
             $icon = $result ? '✓' : '✗';
             $this->line("  {$icon} {$name}: {$status}");
-            if (!$result) {
+            if (! $result) {
                 $allPassed = false;
             }
         }
@@ -45,6 +46,7 @@ class DStackHealth extends Command
     {
         $process = new Process(['docker', 'compose', 'version']);
         $process->run();
+
         return $process->isSuccessful();
     }
 
@@ -52,6 +54,7 @@ class DStackHealth extends Command
     {
         $process = new Process(['ss', '-tlnp']);
         $process->run();
+
         return str_contains($process->getOutput(), ':5000');
     }
 
@@ -63,11 +66,12 @@ class DStackHealth extends Command
     protected function checkSqliteDb(): bool
     {
         $dbPath = database_path('panel.db');
-        if (!file_exists($dbPath)) {
+        if (! file_exists($dbPath)) {
             return false;
         }
         $process = new Process(['sqlite3', $dbPath, 'SELECT 1']);
         $process->run();
+
         return $process->isSuccessful();
     }
 
@@ -76,6 +80,7 @@ class DStackHealth extends Command
         $process = new Process(['docker', 'compose', 'ps', 'nginx']);
         $process->setWorkingDirectory(config('dstack.root'));
         $process->run();
+
         return str_contains($process->getOutput(), 'running');
     }
 }

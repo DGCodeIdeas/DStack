@@ -3,25 +3,29 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\Config;
-use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 class VhostService
 {
-    protected string $root;
-    protected string $vhostsDir;
-    protected string $projectsHostDir;
-    protected string $hostsFile;
-    protected string $nginxContainer;
-    protected string $projectsContainerRoot;
-    protected string $containerSslDir;
+    protected ?string $root = null;
+
+    protected ?string $vhostsDir = null;
+
+    protected ?string $projectsHostDir = null;
+
+    protected string $hostsFile = '/etc/hosts';
+
+    protected ?string $nginxContainer = null;
+
+    protected ?string $projectsContainerRoot = null;
+
+    protected ?string $containerSslDir = null;
 
     public function __construct()
     {
         $this->root = Config::get('dstack.root');
         $this->vhostsDir = Config::get('dstack.vhosts_dir');
         $this->projectsHostDir = Config::get('dstack.projects_dir');
-        $this->hostsFile = '/etc/hosts';
         $this->nginxContainer = Config::get('dstack.nginx_container');
         $this->projectsContainerRoot = Config::get('dstack.container_projects_root');
         $this->containerSslDir = Config::get('dstack.container_ssl_dir');
@@ -29,15 +33,16 @@ class VhostService
 
     public static function validateDomain(string $domain): array
     {
-        if (empty($domain) || !is_string($domain)) {
+        if (empty($domain) || ! is_string($domain)) {
             return [false, 'domain is required and must be a string'];
         }
         if (str_contains($domain, '/') || str_contains($domain, '\\') || str_contains($domain, '..')) {
             return [false, "domain must not contain path separators or '..'"];
         }
-        if (!preg_match('/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$/', $domain)) {
+        if (! preg_match('/^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*$/', $domain)) {
             return [false, "domain must be a valid hostname (e.g. 'testapp.local' or 'api.example.com')"];
         }
+
         return [true, ''];
     }
 
@@ -46,11 +51,11 @@ class VhostService
         $warnings = [];
 
         [$ok, $err] = self::validateDomain($domain);
-        if (!$ok) {
+        if (! $ok) {
             return ['success' => false, 'domain' => $domain, 'root' => null, 'config_path' => null, 'warnings' => [$err]];
         }
 
-        if (!in_array($framework, ['php', 'laravel'])) {
+        if (! in_array($framework, ['php', 'laravel'])) {
             $framework = 'php';
         }
 
@@ -69,7 +74,7 @@ class VhostService
         }
 
         $indexFile = $hostWebRoot->child('index.php');
-        if (!$indexFile->exists()) {
+        if (! $indexFile->exists()) {
             try {
                 $indexFile->write($this->starterIndexPhp($domain));
             } catch (\OSError $e) {
@@ -81,7 +86,7 @@ class VhostService
 
         $containerRoot = $this->mapToContainerRoot($hostWebRoot, $warnings);
 
-        $configPath = $this->vhostsDir . "/{$domain}.conf";
+        $configPath = $this->vhostsDir."/{$domain}.conf";
         try {
             $rendered = $this->renderVhost($domain, $containerRoot, $framework);
             file_put_contents($configPath, $rendered);
@@ -111,12 +116,12 @@ class VhostService
         $warnings = [];
 
         [$ok, $err] = self::validateDomain($domain);
-        if (!$ok) {
+        if (! $ok) {
             return ['success' => false, 'domain' => $domain, 'missing' => false, 'warnings' => [$err]];
         }
 
-        $configPath = $this->vhostsDir . "/{$domain}.conf";
-        if (!file_exists($configPath)) {
+        $configPath = $this->vhostsDir."/{$domain}.conf";
+        if (! file_exists($configPath)) {
             return ['success' => false, 'domain' => $domain, 'missing' => true, 'warnings' => ["No vhost config found at {$configPath}"]];
         }
 
@@ -127,7 +132,7 @@ class VhostService
                 $containerRoot = trim($m[1]);
                 if (str_starts_with($containerRoot, $this->projectsContainerRoot)) {
                     $rel = ltrim(substr($containerRoot, strlen($this->projectsContainerRoot)), '/');
-                    $hostWebRoot = $this->projectsHostDir . '/' . $rel;
+                    $hostWebRoot = $this->projectsHostDir.'/'.$rel;
                 }
             }
         }
@@ -155,17 +160,18 @@ class VhostService
     public function listAll(): array
     {
         $results = [];
-        if (!is_dir($this->vhostsDir)) {
+        if (! is_dir($this->vhostsDir)) {
             return $results;
         }
 
-        foreach (glob($this->vhostsDir . '/*.conf') as $conf) {
+        foreach (glob($this->vhostsDir.'/*.conf') as $conf) {
             $domain = pathinfo($conf, PATHINFO_FILENAME);
             $entry = ['domain' => $domain, 'config_path' => $conf, 'root' => null, 'framework' => 'php'];
 
             $content = @file_get_contents($conf);
             if ($content === false) {
                 $results[] = $entry;
+
                 continue;
             }
 
@@ -180,7 +186,7 @@ class VhostService
                 $containerRoot = trim($m[1]);
                 if (str_starts_with($containerRoot, $this->projectsContainerRoot)) {
                     $rel = ltrim(substr($containerRoot, strlen($this->projectsContainerRoot)), '/');
-                    $entry['root'] = $this->projectsHostDir . '/' . $rel;
+                    $entry['root'] = $this->projectsHostDir.'/'.$rel;
                 } else {
                     $entry['root'] = $containerRoot;
                 }
@@ -200,27 +206,30 @@ class VhostService
     {
         if ($root !== null) {
             $path = new \SplFileInfo($root);
-            if (!$path->isAbsolute()) {
-                $path = new \SplFileInfo($this->projectsHostDir . '/' . $root);
+            if (! $path->isAbsolute()) {
+                $path = new \SplFileInfo($this->projectsHostDir.'/'.$root);
             }
+
             return $path;
         }
 
         if ($framework === 'laravel') {
-            return new \SplFileInfo($this->projectsHostDir . '/' . $domain . '/public');
+            return new \SplFileInfo($this->projectsHostDir.'/'.$domain.'/public');
         }
 
-        return new \SplFileInfo($this->projectsHostDir . '/' . $domain);
+        return new \SplFileInfo($this->projectsHostDir.'/'.$domain);
     }
 
     protected function mapToContainerRoot(string $hostWebRoot, array &$warnings = []): string
     {
         if (str_starts_with($hostWebRoot, $this->projectsHostDir)) {
             $rel = ltrim(substr($hostWebRoot, strlen($this->projectsHostDir)), '/');
-            return $this->projectsContainerRoot . '/' . $rel;
+
+            return $this->projectsContainerRoot.'/'.$rel;
         }
 
         $warnings[] = "Web root {$hostWebRoot} is outside {$this->projectsHostDir}; using it verbatim as the container root (may not be reachable by nginx).";
+
         return $hostWebRoot;
     }
 
@@ -229,20 +238,22 @@ class VhostService
         $warnings = [];
         $entry = "127.0.0.1 {$domain}";
 
-        if (!file_exists($this->hostsFile)) {
+        if (! file_exists($this->hostsFile)) {
             $warnings[] = "Hosts file {$this->hostsFile} does not exist; skipping.";
+
             return $warnings;
         }
 
         $lines = @file($this->hostsFile, FILE_IGNORE_NEW_LINES);
         if ($lines === false) {
             $warnings[] = "Could not read {$this->hostsFile}; run with privileges to update hosts.";
+
             return $warnings;
         }
 
-        $hasEntry = collect($lines)->contains(fn($line) => str_contains($line, $entry));
+        $hasEntry = collect($lines)->contains(fn ($line) => str_contains($line, $entry));
 
-        if ($add && !$hasEntry) {
+        if ($add && ! $hasEntry) {
             $result = @file_put_contents($this->hostsFile, "\n{$entry}\n", FILE_APPEND);
             if ($result === false) {
                 try {
@@ -251,9 +262,9 @@ class VhostService
                     $warnings[] = "Could not add {$entry} to {$this->hostsFile}: {$e->getMessage()}. Add it manually or run with privileges.";
                 }
             }
-        } elseif (!$add && $hasEntry) {
-            $newLines = array_filter($lines, fn($line) => !str_contains($line, $entry));
-            $result = @file_put_contents($this->hostsFile, implode("\n", $newLines) . "\n");
+        } elseif (! $add && $hasEntry) {
+            $newLines = array_filter($lines, fn ($line) => ! str_contains($line, $entry));
+            $result = @file_put_contents($this->hostsFile, implode("\n", $newLines)."\n");
             if ($result === false) {
                 try {
                     $tmp = implode("\n", array_map('rtrim', $newLines));
@@ -271,18 +282,19 @@ class VhostService
     {
         $warnings = [];
         try {
-            $docker = new DockerComposeService();
+            $docker = new DockerComposeService;
             $cmd = array_merge(
                 $docker->baseCommand(),
                 ['exec', $this->nginxContainer, 'nginx', '-s', 'reload']
             );
             $result = $docker->run($cmd);
-            if (!$result['success']) {
+            if (! $result['success']) {
                 $warnings[] = "nginx reload failed: {$result['message']}";
             }
         } catch (\Throwable $e) {
             $warnings[] = "nginx reload could not be attempted: {$e->getMessage()}";
         }
+
         return $warnings;
     }
 
@@ -298,7 +310,7 @@ class VhostService
 
     protected function rmdirRecursive(string $dir): void
     {
-        if (!is_dir($dir)) {
+        if (! is_dir($dir)) {
             return;
         }
         $items = new \FilesystemIterator($dir);
@@ -329,7 +341,7 @@ class VhostService
 
     protected function loadTemplate(): string
     {
-        $fileTpl = $this->root . '/docker/nginx-vhosts.conf';
+        $fileTpl = $this->root.'/docker/nginx-vhosts.conf';
         if (file_exists($fileTpl)) {
             $content = @file_get_contents($fileTpl);
             if ($content !== false) {

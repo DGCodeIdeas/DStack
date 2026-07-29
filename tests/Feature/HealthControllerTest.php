@@ -11,6 +11,8 @@ class HealthControllerTest extends TestCase
 
     public function test_index_returns_health_status(): void
     {
+        $this->actingAsUser();
+
         $response = $this->getJson('/api/health');
 
         $response->assertStatus(200);
