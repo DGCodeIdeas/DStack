@@ -1,7 +1,3 @@
-> [!WARNING]
-> This document describes the legacy Flask-based architecture and is no longer accurate.
-> For current documentation, see the [Documentation Index](./README.md).
-
 # DStack EC2 Deployment Guide
 
 This guide walks you through deploying the full DStack development stack to an AWS EC2 instance using Docker Compose.

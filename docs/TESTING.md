@@ -1,7 +1,3 @@
-> [!WARNING]
-> This document describes the legacy Flask-based architecture and is no longer accurate.
-> For current documentation, see the [Documentation Index](./README.md).
-
 # DStack Testing Guide
 
 This document describes the test scenarios for manual verification and the automated test suite.

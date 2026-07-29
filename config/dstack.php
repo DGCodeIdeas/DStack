@@ -20,24 +20,24 @@ return [
     */
     'root' => env('DSTACK_ROOT', '/opt/dstack-panel'),
 
-    'compose_file' => env('DSTACK_DOCKER_COMPOSE_FILE', '/opt/dstack-panel/docker/docker-compose.yml'),
+    'compose_file' => env('DSTACK_DOCKER_COMPOSE_FILE'),
 
-    'env_file' => env('DSTACK_DOCKER_ENV_FILE', '/opt/dstack-panel/.env'),
+    'env_file' => env('DSTACK_DOCKER_ENV_FILE'),
 
-    'vhosts_dir' => env('DSTACK_VHOSTS_DIR', '/opt/dstack-panel/docker/vhosts'),
+    'vhosts_dir' => env('DSTACK_VHOSTS_DIR'),
 
-    'ssl_dir' => env('DSTACK_SSL_DIR', '/opt/dstack-panel/docker/ssl'),
+    'ssl_dir' => env('DSTACK_SSL_DIR'),
 
-    'projects_dir' => env('DSTACK_PROJECTS_DIR', '/opt/dstack-panel/projects'),
+    'projects_dir' => env('DSTACK_PROJECTS_DIR'),
 
-    'backups_dir' => env('DSTACK_BACKUPS_DIR', '/opt/dstack-panel/backups'),
+    'backups_dir' => env('DSTACK_BACKUPS_DIR'),
 
     /*
     |--------------------------------------------------------------------------
     | Derived Paths
     |--------------------------------------------------------------------------
     */
-    'nginx_container' => env('COMPOSE_PROJECT_NAME', 'devstack').'-nginx',
+    'nginx_container' => env('COMPOSE_PROJECT_NAME', 'devstack') . '-nginx',
 
     'tunnel_pid_file' => storage_path('tunnel.pid'),
 

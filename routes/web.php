@@ -1,16 +1,19 @@
 <?php
 
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\DashboardController;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/login', [AuthController::class, 'showLoginForm'])->name('login');
-Route::post('/login', [AuthController::class, 'login']);
-Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+/*
+|--------------------------------------------------------------------------
+| Web Routes
+|--------------------------------------------------------------------------
+|
+| The SPA fallback route. All client-side routing is handled by the
+| JavaScript bundle; this route simply serves the Blade view that
+| mounts the panel.
+|
+*/
 
-Route::middleware(['auth'])->group(function () {
-    Route::get('/', [DashboardController::class, 'index']);
+Route::get('/', [App\Http\Controllers\DashboardController::class, 'index']);
 
-    Route::get('/{any}', [DashboardController::class, 'index'])
-        ->where('any', '^(?!assets($|/)|storage($|/)|build($|/)|favicon\.ico|robots\.txt).*$');
-});
+Route::get('/{any}', [App\Http\Controllers\DashboardController::class, 'index'])
+    ->where('any', '.*');

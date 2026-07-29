@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\RdsTunnelStartRequest;
 use App\Services\RdsTunnelService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class RdsTunnelController extends Controller
 {
@@ -18,14 +18,12 @@ class RdsTunnelController extends Controller
             $request->input('rds_port', 3306),
             $request->input('local_port', 3307)
         );
-
         return response()->json($result, $result['success'] ? 200 : 400);
     }
 
     public function stop(RdsTunnelService $tunnel): JsonResponse
     {
         $result = $tunnel->disconnect();
-
         return response()->json($result);
     }
 

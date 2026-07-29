@@ -2,13 +2,7 @@
     "name": "dgi/devstack-manager",
     "type": "project",
     "description": "DStack Panel - Laravel 12 Panel for Docker Stack Management",
-    "keywords": [
-        "laravel",
-        "docker",
-        "docker-compose",
-        "panel",
-        "dstack"
-    ],
+    "keywords": ["laravel", "docker", "docker-compose", "panel", "dstack"],
     "license": "MIT",
     "require": {
         "php": "^8.2",
@@ -17,7 +11,6 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
-        "laravel/boost": "^2.4",
         "laravel/pint": "^1.13",
         "laravel/sail": "^1.26",
         "mockery/mockery": "^1.6",

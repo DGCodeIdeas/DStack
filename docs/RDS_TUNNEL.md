@@ -1,7 +1,3 @@
-> [!WARNING]
-> This document describes the legacy Flask-based architecture and is no longer accurate.
-> For current documentation, see the [Documentation Index](./README.md).
-
 # RDS SSH Tunnel (Local ↔ EC2 ↔ RDS)
 
 This guide explains how to use the DevStack **RDS tunnel** feature, which opens

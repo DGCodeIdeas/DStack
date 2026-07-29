@@ -1,7 +1,3 @@
-> [!WARNING]
-> This document describes the legacy Flask-based architecture and is no longer accurate.
-> For current documentation, see the [Documentation Index](./README.md).
-
 # Local Development Setup
 
 This guide provides detailed step-by-step instructions for setting up DStack locally on Kubuntu (and compatible Ubuntu/Debian-based distributions).

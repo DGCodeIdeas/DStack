@@ -1,7 +1,3 @@
-> [!WARNING]
-> This document describes the legacy Flask-based architecture and is no longer accurate.
-> For current documentation, see the [Documentation Index](./README.md).
-
 # DStack API Reference
 
 Complete REST API documentation for the DStack Flask backend (`server/app.py`). All endpoints are served at `http://localhost:5000` by default.
@@ -146,14 +142,14 @@ List all configured virtual hosts.
 [
   {
     "domain": "testapp.local",
-    "config_path": "/home/dgi/devstack-manager/docker/vhosts/testapp.local.conf",
-    "root": "/home/dgi/devstack-manager/projects/testapp.local",
+    "config_path": "/home/user/DStack/docker/vhosts/testapp.local.conf",
+    "root": "/home/user/DStack/projects/testapp.local",
     "framework": "php"
   },
   {
     "domain": "myapp.local",
-    "config_path": "/home/dgi/devstack-manager/docker/vhosts/myapp.local.conf",
-    "root": "/home/dgi/devstack-manager/projects/myapp.local/public",
+    "config_path": "/home/user/DStack/docker/vhosts/myapp.local.conf",
+    "root": "/home/user/DStack/projects/myapp.local/public",
     "framework": "laravel"
   }
 ]
@@ -175,7 +171,7 @@ Create a new virtual host.
 {
   "domain": "myapp.local",
   "framework": "laravel",
-  "root": "/home/dgi/devstack-manager/projects/myapp.local/public"
+  "root": "/home/user/DStack/projects/myapp.local/public"
 }
 ```
 
@@ -190,8 +186,8 @@ Create a new virtual host.
 {
   "success": true,
   "domain": "myapp.local",
-  "root": "/home/dgi/devstack-manager/projects/myapp.local/public",
-  "config_path": "/home/dgi/devstack-manager/docker/vhosts/myapp.local.conf",
+  "root": "/home/user/DStack/projects/myapp.local/public",
+  "config_path": "/home/user/DStack/docker/vhosts/myapp.local.conf",
   "warnings": []
 }
 ```
@@ -240,8 +236,8 @@ Delete a virtual host.
   "success": true,
   "domain": "myapp.local",
   "missing": false,
-  "removed_config": "/home/dgi/devstack-manager/docker/vhosts/myapp.local.conf",
-  "removed_files": "/home/dgi/devstack-manager/projects/myapp.local",
+  "removed_config": "/home/user/DStack/docker/vhosts/myapp.local.conf",
+  "removed_files": "/home/user/DStack/projects/myapp.local",
   "warnings": []
 }
 ```
@@ -252,7 +248,7 @@ Delete a virtual host.
   "success": false,
   "domain": "nonexistent.local",
   "missing": true,
-  "warnings": ["No vhost config found at /home/dgi/devstack-manager/docker/vhosts/nonexistent.local.conf"]
+  "warnings": ["No vhost config found at /home/user/DStack/docker/vhosts/nonexistent.local.conf"]
 }
 ```
 
@@ -278,8 +274,8 @@ List all certificates in the SSL directory.
 [
   {
     "domain": "myapp.local",
-    "cert_path": "/home/dgi/devstack-manager/docker/ssl/myapp.local.pem",
-    "key_path": "/home/dgi/devstack-manager/docker/ssl/myapp.local-key.pem",
+    "cert_path": "/home/user/DStack/docker/ssl/myapp.local.pem",
+    "key_path": "/home/user/DStack/docker/ssl/myapp.local-key.pem",
     "exists": true
   }
 ]
@@ -308,8 +304,8 @@ Generate a locally-trusted certificate using **mkcert**.
 {
   "success": true,
   "domain": "myapp.local",
-  "cert_path": "/home/dgi/devstack-manager/docker/ssl/myapp.local.pem",
-  "key_path": "/home/dgi/devstack-manager/docker/ssl/myapp.local-key.pem",
+  "cert_path": "/home/user/DStack/docker/ssl/myapp.local.pem",
+  "key_path": "/home/user/DStack/docker/ssl/myapp.local-key.pem",
   "message": "Certificate created for myapp.local via mkcert",
   "vhost_enabled": true,
   "warnings": []
@@ -360,8 +356,8 @@ Request a Let's Encrypt certificate via **certbot**.
 {
   "success": true,
   "domain": "myapp.example.com",
-  "cert_path": "/home/dgi/devstack-manager/docker/ssl/myapp.example.com.pem",
-  "key_path": "/home/dgi/devstack-manager/docker/ssl/myapp.example.com-key.pem",
+  "cert_path": "/home/user/DStack/docker/ssl/myapp.example.com.pem",
+  "key_path": "/home/user/DStack/docker/ssl/myapp.example.com-key.pem",
   "message": "Certificate created for myapp.example.com via Let's Encrypt",
   "vhost_enabled": true,
   "warnings": []
@@ -622,7 +618,7 @@ Create a database backup.
 {
   "success": true,
   "backup_id": "20260718_120000",
-  "path": "/home/dgi/devstack-manager/backups/20260718_120000",
+  "path": "/home/user/DStack/backups/20260718_120000",
   "files": ["all.sql.gz"],
   "message": "Backup '20260718_120000' created."
 }

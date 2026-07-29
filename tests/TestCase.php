@@ -2,13 +2,15 @@
 
 namespace Tests;
 
-use App\Models\User;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
 abstract class TestCase extends BaseTestCase
 {
-    protected function actingAsUser(): void
+    use \Illuminate\Foundation\Testing\WithFaker;
+    use \Illuminate\Foundation\Testing\RefreshDatabase;
+
+    protected function setUp(): void
     {
-        $this->actingAs(User::factory()->create());
+        parent::setUp();
     }
 }

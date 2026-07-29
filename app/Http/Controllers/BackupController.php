@@ -2,10 +2,9 @@
 
 namespace App\Http\Controllers;
 
-use App\Http\Requests\CreateBackupRequest;
-use App\Http\Requests\RestoreBackupRequest;
 use App\Services\BackupService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class BackupController extends Controller
 {
@@ -15,7 +14,6 @@ class BackupController extends Controller
             $request->input('database', 'all'),
             $request->input('description', '')
         );
-
         return response()->json($result, $result['success'] ? 200 : 500);
     }
 

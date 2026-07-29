@@ -3,16 +3,16 @@
 namespace Tests\Unit;
 
 use App\Services\LogService;
-use Tests\TestCase;
+use PHPUnit\Framework\TestCase;
 
 class LogServiceTest extends TestCase
 {
-    public function test_parse_logs_output_with_pipe_separated_lines(): void
+    public function testParseLogsOutputWithPipeSeparatedLines(): void
     {
-        $log = new LogService;
+        $log = new LogService();
         $raw = "nginx-1 | 192.168.1.1 - - [01/Jul/2026:00:00:00 +0000] \"GET / HTTP/1.1\" 200\n"
-             ."php-1    | PHP Deprecated: something in /var/www/index.php on line 10\n"
-             .'mysql-1  | 2026-07-18T19:00:01.123456Z 0 [System] [MY-010116] Server startup';
+             . "php-1    | PHP Deprecated: something in /var/www/index.php on line 10\n"
+             . "mysql-1  | 2026-07-18T19:00:01.123456Z 0 [System] [MY-010116] Server startup";
 
         $entries = $log->parseLogsOutput($raw);
 
@@ -22,11 +22,11 @@ class LogServiceTest extends TestCase
         $this->assertEquals('mysql', $entries[2]['service']);
     }
 
-    public function test_parse_logs_output_strips_container_index(): void
+    public function testParseLogsOutputStripsContainerIndex(): void
     {
-        $log = new LogService;
+        $log = new LogService();
         $raw = "nginx-1 | message here\n"
-             .'redis-2 | another message';
+             . "redis-2 | another message";
 
         $entries = $log->parseLogsOutput($raw);
 
@@ -34,10 +34,10 @@ class LogServiceTest extends TestCase
         $this->assertEquals('redis', $entries[1]['service']);
     }
 
-    public function test_parse_logs_output_with_bare_message(): void
+    public function testParseLogsOutputWithBareMessage(): void
     {
-        $log = new LogService;
-        $raw = 'this line has no pipe separator so it is treated as a bare message';
+        $log = new LogService();
+        $raw = "this line has no pipe separator so it is treated as a bare message";
 
         $entries = $log->parseLogsOutput($raw);
 
@@ -46,17 +46,17 @@ class LogServiceTest extends TestCase
         $this->assertEquals('this line has no pipe separator so it is treated as a bare message', $entries[0]['message']);
     }
 
-    public function test_parse_logs_output_with_empty_string(): void
+    public function testParseLogsOutputWithEmptyString(): void
     {
-        $log = new LogService;
+        $log = new LogService();
         $entries = $log->parseLogsOutput('');
         $this->assertEquals([], $entries);
     }
 
-    public function test_parse_log_line_with_pipe_separator(): void
+    public function testParseLogLineWithPipeSeparator(): void
     {
-        $log = new LogService;
-        $line = 'nginx-1 | 192.168.1.1 - - [01/Jul/2026:00:00:00 +0000] "GET / HTTP/1.1" 200';
+        $log = new LogService();
+        $line = "nginx-1 | 192.168.1.1 - - [01/Jul/2026:00:00:00 +0000] \"GET / HTTP/1.1\" 200";
 
         $entry = $log->parseLogLine($line);
 
@@ -65,10 +65,10 @@ class LogServiceTest extends TestCase
         $this->assertEquals($line, $entry['raw']);
     }
 
-    public function test_parse_log_line_without_pipe_separator(): void
+    public function testParseLogLineWithoutPipeSeparator(): void
     {
-        $log = new LogService;
-        $line = 'this line has no pipe separator';
+        $log = new LogService();
+        $line = "this line has no pipe separator";
 
         $entry = $log->parseLogLine($line);
 
@@ -76,9 +76,9 @@ class LogServiceTest extends TestCase
         $this->assertEquals('this line has no pipe separator', $entry['message']);
     }
 
-    public function test_parse_log_line_strips_trailing_newline(): void
+    public function testParseLogLineStripsTrailingNewline(): void
     {
-        $log = new LogService;
+        $log = new LogService();
         $line = "nginx-1 | message\n";
 
         $entry = $log->parseLogLine($line);
@@ -87,9 +87,9 @@ class LogServiceTest extends TestCase
         $this->assertEquals('message', $entry['message']);
     }
 
-    public function test_parse_logs_output_filters_empty_lines(): void
+    public function testParseLogsOutputFiltersEmptyLines(): void
     {
-        $log = new LogService;
+        $log = new LogService();
         $raw = "nginx-1 | message\n\n";
 
         $entries = $log->parseLogsOutput($raw);

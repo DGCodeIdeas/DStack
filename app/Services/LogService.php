@@ -8,14 +8,10 @@ use Symfony\Component\Process\Process;
 
 class LogService
 {
-    protected ?string $root = null;
-
-    protected ?string $composeFile = null;
-
-    protected ?string $envFile = null;
-
+    protected string $root;
+    protected string $composeFile;
+    protected string $envFile;
     protected int $timeout;
-
     protected array $dockerCmd;
 
     public function __construct()
@@ -23,7 +19,7 @@ class LogService
         $this->root = Config::get('dstack.root');
         $this->composeFile = Config::get('dstack.compose_file');
         $this->envFile = Config::get('dstack.env_file');
-        $this->timeout = Config::get('dstack.compose_timeout', 60);
+        $this->timeout = Config::get('dstack.compose_timeout');
         $this->dockerCmd = $this->detectDockerCommand();
     }
 
@@ -38,7 +34,6 @@ class LogService
         if ($this->canRun(['docker', 'version'])) {
             return ['docker', 'compose'];
         }
-
         return ['docker', 'compose'];
     }
 
@@ -48,7 +43,6 @@ class LogService
             $process = new Process($cmd);
             $process->setTimeout(10);
             $process->run();
-
             return $process->isSuccessful();
         } catch (\Exception $e) {
             return false;
@@ -68,10 +62,10 @@ class LogService
     {
         $validTargets = ['nginx', 'php', 'mysql', 'redis', 'phpmyadmin', 'all'];
 
-        if (! in_array($service, $validTargets)) {
+        if (!in_array($service, $validTargets)) {
             return [
                 'success' => false,
-                'message' => "Unknown service '{$service}'. Valid targets: ".implode(', ', $validTargets),
+                'message' => "Unknown service '{$service}'. Valid targets: " . implode(', ', $validTargets),
                 'service' => $service,
                 'lines' => [],
                 'entries' => [],
@@ -89,7 +83,7 @@ class LogService
 
         $result = $this->runProcess($cmd);
 
-        if (! $result['success']) {
+        if (!$result['success']) {
             return [
                 'success' => false,
                 'message' => $result['message'],
@@ -127,7 +121,7 @@ class LogService
             array_map(function (string $line) {
                 return $this->parseLogLine($line);
             }, explode("\n", $raw)),
-            fn ($entry) => trim($entry['raw']) !== ''
+            fn($entry) => trim($entry['raw']) !== ''
         );
     }
 
@@ -141,10 +135,8 @@ class LogService
             if (count($parts) === 2 && ctype_digit($parts[1])) {
                 $service = $parts[0];
             }
-
             return ['raw' => $line, 'service' => $service, 'message' => $m[2]];
         }
-
         return ['raw' => $line, 'service' => null, 'message' => $line];
     }
 
@@ -156,7 +148,7 @@ class LogService
             $process->setWorkingDirectory($this->root);
             $process->run();
         } catch (ProcessTimedOutException $e) {
-            return ['success' => false, 'message' => "Command timed out after {$this->timeout}s: ".implode(' ', $cmd), 'stdout' => '', 'stderr' => ''];
+            return ['success' => false, 'message' => "Command timed out after {$this->timeout}s: " . implode(' ', $cmd), 'stdout' => '', 'stderr' => ''];
         } catch (\Exception $e) {
             return ['success' => false, 'message' => "OS error running command: {$e->getMessage()}", 'stdout' => '', 'stderr' => ''];
         }
@@ -166,7 +158,6 @@ class LogService
 
         if ($process->getExitCode() !== 0) {
             $detail = trim($stderr ?: $stdout) ?: "Command failed (exit {$process->getExitCode()})";
-
             return ['success' => false, 'message' => $detail, 'stdout' => $stdout, 'stderr' => $stderr];
         }
 
