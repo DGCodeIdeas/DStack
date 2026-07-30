@@ -1,16 +1,26 @@
 [Unit]
 Description=DStack Laravel Panel (%i)
-After=network.target docker.service
+After=nginx.service php%i-fpm.service docker.service
+Requires=php%i-fpm.service nginx.service
 
 [Service]
-Type=simple
+Type=oneshot
 User=www-data
 WorkingDirectory=/opt/dstack-panel
 EnvironmentFile=-/opt/dstack-panel/.env.%i
 Environment=APP_ENV=production
-ExecStart=/usr/bin/php artisan serve --host=127.0.0.1 --port=${PORT}
-Restart=always
-RestartSec=3
+ExecStart=/bin/bash -c '\
+    if [ -d /opt/dstack-panel/releases/%i ]; then \
+        rsync -a --delete /opt/dstack-panel/releases/%i/ /opt/dstack-panel/ ; \
+    fi && \
+    cd /opt/dstack-panel && \
+    php artisan cache:clear --no-warmup && \
+    php artisan config:cache && \
+    php artisan route:cache && \
+    php artisan view:cache && \
+    /usr/bin/systemctl reload php%i-fpm'
+ExecStop=/usr/bin/systemctl reload php%i-fpm
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

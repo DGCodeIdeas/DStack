@@ -1,43 +1,33 @@
 # Architecture Overview
 
-This document explains the DStack Panel project structure, runtime components, and the blue-green deployment model.
+This document explains the DStack Panel project structure, runtime components, and the deployment model.
 
 ---
 
 ## High-Level Architecture
 
-DStack Panel is a **Laravel 12** single-page application (SPA) that manages Docker stacks via the host Docker daemon. The panel itself runs as two blue-green PHP built-in server instances behind an nginx reverse proxy.
+DStack Panel is a **Laravel 12** single-page application (SPA) that manages Docker stacks via the host Docker daemon. The panel itself is served directly by nginx + PHP-FPM on the host.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                        EC2 Host                              │
 │                                                              │
 │  ┌────────────────┐         ┌──────────────────────────┐    │
-│  │   nginx        │         │   Docker Compose Stack   │    │
-│  │  (host)        │         │                          │    │
-│  │                │◄───────►│  nginx, php-fpm, mysql,  │    │
-│  │ panel_backend  │ proxy   │  redis, phpmyadmin       │    │
-│  │ upstream       │         │                          │    │
-│  │ 127.0.0.1:5000 │         └──────────────────────────┘    │
-│  │ 127.0.0.1:5001 │                                         │
-│  └───────┬────────┘                                         │
-│          │                                                   │
-│  ┌───────▼────────┐     ┌──────────────────────────┐       │
-│  │ dstack-panel@  │     │   Laravel 12 Panel App    │       │
-│  │ green (5000)   │     │                          │       │
-│  └────────────────┘     │  app/Services/            │       │
-│  ┌────────────────┐     │  - DockerComposeService   │       │
-│  │ dstack-panel@  │     │  - SslService             │       │
-│  │ blue (5001)    │     │  - BackupService          │       │
-│  └────────────────┘     │  - VhostService           │       │
-│                         │  - LogService             │       │
-│                         │  - RdsTunnelService       │       │
-│                         │                          │       │
-│                         │  routes/                  │       │
-│                         │  - web.php (SPA fallback) │       │
-│                         │  - api.php (REST API)     │       │
-│                         │  - console.php (Artisan)  │       │
-│                         └──────────────────────────┘       │
+│  │   nginx         │         │   Docker Compose Stack   │    │
+│  │  (host)         │    ──►  │                          │    │
+│  │                 │ proxy   │  nginx, php-fpm, mysql,  │    │
+│  │  /run/php/      │         │  redis, phpmyadmin       │    │
+│  │  php8.2-fpm-    │         │                          │    │
+│  │  dstack.sock    │         └──────────────────────────┘    │
+│  └───────┬─────────┘                                         │
+│          │                                                     │
+│  ┌───────▼──────────────────────────────────────────────┐   │
+│  │         Laravel 12 Panel App (served via FPM)         │   │
+│  │                                                        │   │
+│  │  app/Services/            │                           │   │
+│  │  routes/ (web.php, api)   │                           │   │
+│  │  config/ (dstack.php)     │                           │   │
+│  └──────────────────────────────────────────────────────┘   │
 │                                                              │
 │  Panel SPA connects via:                                    │
 │  - REST API (JSON)                                          │
@@ -49,29 +39,23 @@ DStack Panel is a **Laravel 12** single-page application (SPA) that manages Dock
 
 ## Components
 
-### 1. Host Nginx
+### 1. Host Nginx + PHP-FPM
 
-- Located at `docker/nginx.conf` and `nginx/chadadigital.com.conf`
-- Defines `upstream panel_backend { 127.0.0.1:5000; 127.0.0.1:5001; }`
-- Proxies `panel.chadadigital.com` to the upstream
-- Handles WebSocket upgrade headers for SSE
+- nginx configuration: `nginx/chadadigital.com.conf`
+- PHP-FPM pool: `/etc/php/8.2/fpm/pool.d/dstack.conf`
+- Serves the Laravel panel directly via PHP-FPM socket (`/run/php/php8.2-fpm-dstack.sock`)
+- Proxies external project requests to the Docker Compose stack (separate nginx in Docker)
+- Handles WebSocket upgrade headers for SSE at `/api/events`
+- Static assets (`/assets/`) served directly by nginx, bypassing PHP
 
-### 2. Blue-Green Systemd Instances
-
-- Template: `systemd/dstack-panel@.service`
-- Two instances: `dstack-panel@green` (port 5000) and `dstack-panel@blue` (port 5001)
-- Each reads from its own env file: `.env.green` / `.env.blue`
-- `EnvironmentFile=-/opt/dstack-panel/.env.%i` provides instance-specific config
-- Active instance tracked in `/opt/dstack-panel/.active_instance`
-
-### 3. Docker Compose Stack
+### 2. Docker Compose Stack (Projects)
 
 - File: `docker/docker-compose.yml`
 - Services: nginx, php-fpm, mysql, redis, phpmyadmin
 - Manages the host project vhosts in `docker/vhosts/`
 - Projects served from `PROJECTS_ROOT` (e.g., `/opt/dstack-panel/projects/`)
 
-### 4. Laravel Panel Application
+### 3. Laravel Panel Application
 
 - **Framework**: Laravel 12
 - **Frontend**: SPA built with Bun + Vite (resources/js/app.js)
@@ -87,7 +71,7 @@ DStack Panel is a **Laravel 12** single-page application (SPA) that manages Dock
 ```
 app/
 ├── Console/Commands/
-│   ├── DStackUpdate.php          # Self-update (blue-green)
+│   ├── DStackUpdate.php          # Self-update deployment
 │   ├── DStackBootstrap.php       # First-run environment bootstrap
 │   ├── DStackHealth.php          # Diagnostic health check
 │   ├── DStackSetup.php           # First-run wizard
@@ -165,46 +149,37 @@ tests/
 
 ---
 
-## Blue-Green Runtime Flow
+## Deployment Flow
 
 ```
 User Request
     │
     ▼
-nginx listens on 80/443
+nginx (ports 80/443)
     │
     ▼
-proxy_pass → panel_backend upstream
+FastCGI → PHP-FPM socket (/run/php/php8.2-fpm-dstack.sock)
     │
-    ├──────────────────────┐
-    │                      │
-    ▼                      ▼
-127.0.0.1:5000      127.0.0.1:5001
-dstack-panel@         dstack-panel@
-green                 blue
-(active)              (idle)
-    │                      │
-    │◄──── nginx reload ───┘
-    │   (switches upstream)
     ▼
-Response
+Laravel application (routes/web.php, routes/api.php)
+    │
+    ▼
+Response (HTML, JSON, or text/event-stream for SSE)
 ```
 
 ### Deploy Sequence
 
-1. CI reads `.active_instance` (e.g., `green`)
-2. Computes next color (`blue`)
-3. Rsyncs code to `/opt/dstack-panel`
-4. Starts `dstack-panel@blue` (port 5001)
-5. Runs migrations
+1. CI builds assets (`bun run prod`) and packages the release tarball
+2. Rsyncs code to `/opt/dstack-panel`
+3. Runs migrations (`php artisan migrate --force`)
+4. Runs Laravel optimization (`php artisan config:cache`, `route:cache`, etc.)
+5. Restarts PHP-FPM to pick up code changes
 6. Health checks `/up` and `/api/health`
-7. Reloads nginx — upstream now points to `5001` first
-8. Stops `dstack-panel@green`
-9. Writes `blue` to `.active_instance`
+7. Reloads nginx if config changed
 
 ### Rollback
 
-If step 6 fails, the pipeline exits non-zero. The old instance (`green`) remains running. nginx continues serving it. No manual intervention needed — the next deploy retries.
+If step 6 fails, the pipeline exits non-zero. The previous code version remains running since PHP-FPM reads files on each request. Rollback is achieved by rsyncing the previous release tarball back to `/opt/dstack-panel` and restarting PHP-FPM.
 
 ---
 
@@ -251,11 +226,12 @@ Browser (EventSource)
 | Decision | Rationale |
 |----------|-----------|
 | Laravel 12 instead of Flask | PHP 8.2 ecosystem, Eloquent ORM, built-in auth, routing, testing |
-| Blue-green instead of rolling | Single EC2 host, zero downtime, instant rollback |
-| systemd template (`dstack-panel@.service`) | Runs two instances on different ports |
-| nginx upstream proxy | Host-level routing without load balancer |
+| Single PHP-FPM + nginx instance | Simpler than blue-green, no port-based upstream needed |
+| systemd template (`dstack-panel@.service`) | Type=oneshot deployment trigger, runs migration and optimization |
+| nginx serves PHP directly via FPM socket | No reverse proxy to artisan serve, better performance |
 | SQLite locally, MySQL in production | Zero-config local dev, scalable production |
 | Bun + Vite frontend | Fast builds, SPA support, asset versioning |
 | SSE over polling | Efficient real-time log/event streaming |
 | `/etc/nginx/sites-available/` on host | Clean separation from Docker-managed vhosts |
-| `.active_instance` file | Simple state tracking without database |
+| PHP-FPM dynamic PM (max_children=6) | Tuned for t3.small with 2 GB RAM |
+| www-data for file ownership | Least-privilege for PHP-FPM process |

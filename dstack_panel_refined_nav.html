@@ -1,0 +1,583 @@
+<h2 class="sr-only">
+  Refined DStack panel with sidebar navigation across dashboard, vhosts, SSL,
+  RDS tunnel, logs, and backups
+</h2>
+<style>
+  .dsp-icon {
+    width: 56px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius);
+    color: var(--text-secondary);
+    font-size: 19px;
+    cursor: pointer;
+  }
+  .dsp-icon.active {
+    background: var(--bg-accent);
+    color: var(--text-accent);
+  }
+  .dsp-icon:hover:not(.active) {
+    background: var(--surface-1);
+  }
+  .dsp-btn {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .dsp-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--fill-success);
+    display: inline-block;
+    margin-right: 6px;
+  }
+  .dsp-chip {
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: var(--radius);
+    display: inline-block;
+  }
+  td.trunc {
+    max-width: 160px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>
+<div style="display: flex; gap: 16px">
+  <div
+    style="
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 0;
+      flex-shrink: 0;
+    "
+  >
+    <div
+      class="dsp-icon dsp-nav-icon"
+      data-panel="dashboard"
+      aria-label="Dashboard"
+    >
+      <i class="ti ti-layout-dashboard" aria-hidden="true"></i>
+    </div>
+    <div
+      class="dsp-icon dsp-nav-icon"
+      data-panel="vhosts"
+      aria-label="Virtual hosts"
+    >
+      <i class="ti ti-world" aria-hidden="true"></i>
+    </div>
+    <div class="dsp-icon dsp-nav-icon" data-panel="ssl" aria-label="SSL">
+      <i class="ti ti-lock" aria-hidden="true"></i>
+    </div>
+    <div class="dsp-icon dsp-nav-icon" data-panel="rds" aria-label="RDS tunnel">
+      <i class="ti ti-database" aria-hidden="true"></i>
+    </div>
+    <div class="dsp-icon dsp-nav-icon" data-panel="logs" aria-label="Logs">
+      <i class="ti ti-terminal-2" aria-hidden="true"></i>
+    </div>
+    <div
+      class="dsp-icon dsp-nav-icon"
+      data-panel="backups"
+      aria-label="Backups"
+    >
+      <i class="ti ti-archive" aria-hidden="true"></i>
+    </div>
+  </div>
+
+  <div style="flex: 1; min-width: 0; padding: 8px 0">
+    <div class="dsp-panel" data-panel="dashboard">
+      <div
+        style="
+          display: flex;
+          justify-content: flex-end;
+          gap: 8px;
+          margin-bottom: 12px;
+        "
+      >
+        <button class="dsp-btn">
+          <i class="ti ti-player-play" aria-hidden="true"></i>Start all
+        </button>
+        <button class="dsp-btn">
+          <i class="ti ti-player-stop" aria-hidden="true"></i>Stop all
+        </button>
+      </div>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 12px;
+        "
+      >
+        <div
+          style="
+            background: var(--surface-2);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+          "
+        >
+          <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+            mysql
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-success);
+              margin-bottom: 10px;
+            "
+          >
+            <span class="dsp-dot" aria-hidden="true"></span>running
+          </div>
+          <div style="display: flex; gap: 6px">
+            <button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-player-stop"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i></button
+            ><button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-refresh"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i>
+            </button>
+          </div>
+        </div>
+        <div
+          style="
+            background: var(--surface-2);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+          "
+        >
+          <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+            nginx
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-success);
+              margin-bottom: 10px;
+            "
+          >
+            <span class="dsp-dot" aria-hidden="true"></span>running
+          </div>
+          <div style="display: flex; gap: 6px">
+            <button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-player-stop"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i></button
+            ><button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-refresh"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i>
+            </button>
+          </div>
+        </div>
+        <div
+          style="
+            background: var(--surface-2);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+          "
+        >
+          <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+            php
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-success);
+              margin-bottom: 10px;
+            "
+          >
+            <span class="dsp-dot" aria-hidden="true"></span>running
+          </div>
+          <div style="display: flex; gap: 6px">
+            <button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-player-stop"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i></button
+            ><button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-refresh"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i>
+            </button>
+          </div>
+        </div>
+        <div
+          style="
+            background: var(--surface-2);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+          "
+        >
+          <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+            phpmyadmin
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-success);
+              margin-bottom: 10px;
+            "
+          >
+            <span class="dsp-dot" aria-hidden="true"></span>running
+          </div>
+          <div style="display: flex; gap: 6px">
+            <button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-player-stop"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i></button
+            ><button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-refresh"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i>
+            </button>
+          </div>
+        </div>
+        <div
+          style="
+            background: var(--surface-2);
+            border: 0.5px solid var(--border);
+            border-radius: 12px;
+            padding: 12px;
+          "
+        >
+          <div style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+            redis
+          </div>
+          <div
+            style="
+              font-size: 12px;
+              color: var(--text-success);
+              margin-bottom: 10px;
+            "
+          >
+            <span class="dsp-dot" aria-hidden="true"></span>running
+          </div>
+          <div style="display: flex; gap: 6px">
+            <button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-player-stop"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i></button
+            ><button class="dsp-btn" style="padding: 0 8px">
+              <i
+                class="ti ti-refresh"
+                aria-hidden="true"
+                style="font-size: 13px"
+              ></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="dsp-panel" data-panel="vhosts">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 8px">
+        <button class="dsp-btn">
+          <i class="ti ti-plus" aria-hidden="true"></i>Add vhost
+        </button>
+      </div>
+      <div
+        style="
+          border: 0.5px solid var(--border);
+          border-radius: 12px;
+          overflow: hidden;
+        "
+      >
+        <table
+          style="
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+            table-layout: fixed;
+          "
+        >
+          <tr style="background: var(--surface-1)">
+            <td style="padding: 8px 12px; color: var(--text-secondary)">
+              Domain
+            </td>
+            <td style="padding: 8px 12px; color: var(--text-secondary)">
+              Framework
+            </td>
+            <td style="padding: 8px 12px; color: var(--text-secondary)">
+              Root path
+            </td>
+            <td
+              style="
+                padding: 8px 12px;
+                color: var(--text-secondary);
+                width: 70px;
+              "
+            >
+              Actions
+            </td>
+          </tr>
+          <tr style="border-top: 0.5px solid var(--border)">
+            <td style="padding: 8px 12px">chadadigital.local</td>
+            <td style="padding: 8px 12px">laravel</td>
+            <td
+              class="trunc"
+              style="padding: 8px 12px; color: var(--text-secondary)"
+              title="/home/dgi/devstack-manager/DStack/projects/chadadigital.local/public"
+            >
+              .../chadadigital.local/public
+            </td>
+            <td style="padding: 8px 12px">
+              <button class="dsp-btn" style="padding: 0 8px">
+                <i
+                  class="ti ti-trash"
+                  aria-hidden="true"
+                  style="font-size: 13px"
+                ></i>
+              </button>
+            </td>
+          </tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="dsp-panel" data-panel="ssl">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 8px">
+        <button
+          class="dsp-btn"
+          onclick="
+            document.getElementById('ssl-form').style.display =
+              document.getElementById('ssl-form').style.display === 'none'
+                ? 'grid'
+                : 'none'
+          "
+        >
+          <i class="ti ti-plus" aria-hidden="true"></i>Add certificate
+        </button>
+      </div>
+      <div
+        id="ssl-form"
+        style="
+          display: none;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+          margin-bottom: 16px;
+        "
+      >
+        <div
+          style="
+            background: var(--surface-1);
+            border-radius: var(--radius);
+            padding: 12px;
+          "
+        >
+          <p style="font-size: 13px; font-weight: 500; margin: 0 0 8px">
+            Local (mkcert)
+          </p>
+          <input
+            type="text"
+            placeholder="example.local"
+            style="width: 100%; margin-bottom: 8px"
+          />
+          <button class="dsp-btn">Generate</button>
+        </div>
+        <div
+          style="
+            background: var(--surface-1);
+            border-radius: var(--radius);
+            padding: 12px;
+          "
+        >
+          <p style="font-size: 13px; font-weight: 500; margin: 0 0 8px">
+            Let's encrypt
+          </p>
+          <input
+            type="text"
+            placeholder="example.com"
+            style="width: 100%; margin-bottom: 8px"
+          />
+          <input
+            type="text"
+            placeholder="admin@example.com"
+            style="width: 100%; margin-bottom: 8px"
+          />
+          <button class="dsp-btn">Request</button>
+        </div>
+      </div>
+      <div
+        style="
+          border: 0.5px solid var(--border);
+          border-radius: 12px;
+          padding: 2rem;
+          text-align: center;
+        "
+      >
+        <p style="font-size: 14px; margin: 0 0 4px">No certificates yet</p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0">
+          Add a local or Let's encrypt certificate to get started.
+        </p>
+      </div>
+    </div>
+
+    <div class="dsp-panel" data-panel="rds">
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          margin-bottom: 16px;
+        "
+      >
+        <span style="font-size: 13px; color: var(--text-secondary)"
+          >Connection status</span
+        >
+        <span
+          class="dsp-chip"
+          style="background: var(--bg-success); color: var(--text-success)"
+          >Connected</span
+        >
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 6px">
+        SSH connection
+      </p>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 14px;
+        "
+      >
+        <input type="text" placeholder="ec2-user@1.2.3.4" />
+        <input type="text" placeholder="ec2-user" />
+        <input type="text" placeholder="~/.ssh/id_rsa" />
+      </div>
+      <p style="font-size: 12px; color: var(--text-muted); margin: 0 0 6px">
+        RDS connection
+      </p>
+      <div
+        style="
+          display: grid;
+          grid-template-columns: 2fr 1fr 1fr;
+          gap: 10px;
+          margin-bottom: 16px;
+        "
+      >
+        <input type="text" placeholder="mydb.xyz.us-east-1.rds.amazonaws.com" />
+        <input type="text" placeholder="3306" />
+        <input type="text" placeholder="3307" />
+      </div>
+      <div style="display: flex; gap: 8px">
+        <button class="dsp-btn">
+          <i class="ti ti-player-play" aria-hidden="true"></i>Start tunnel
+        </button>
+        <button class="dsp-btn">
+          <i class="ti ti-player-stop" aria-hidden="true"></i>Stop tunnel
+        </button>
+      </div>
+    </div>
+
+    <div class="dsp-panel" data-panel="logs">
+      <div
+        style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 8px;
+        "
+      >
+        <select style="width: 160px">
+          <option>All services</option>
+        </select>
+        <button class="dsp-btn">Clear</button>
+      </div>
+      <div
+        style="
+          background: var(--surface-1);
+          border-radius: 12px;
+          padding: 12px;
+          font-family: var(--font-mono);
+          font-size: 12px;
+          line-height: 1.6;
+        "
+      >
+        <div>
+          <span style="color: var(--text-muted)">18:39:02</span>
+          <span style="color: var(--text-success)">nginx</span> started worker
+          process
+        </div>
+        <div>
+          <span style="color: var(--text-muted)">18:39:03</span>
+          <span style="color: var(--text-success)">php-fpm</span> pool www ready
+        </div>
+        <div>
+          <span style="color: var(--text-muted)">18:39:05</span>
+          <span style="color: var(--text-danger)">mysql</span> connection
+          refused, retrying
+        </div>
+      </div>
+    </div>
+
+    <div class="dsp-panel" data-panel="backups">
+      <div style="display: flex; justify-content: flex-end; margin-bottom: 8px">
+        <button class="dsp-btn">
+          <i class="ti ti-plus" aria-hidden="true"></i>Create backup
+        </button>
+      </div>
+      <div
+        style="
+          border: 0.5px solid var(--border);
+          border-radius: 12px;
+          padding: 2rem;
+          text-align: center;
+        "
+      >
+        <p style="font-size: 14px; margin: 0 0 4px">No backups yet</p>
+        <p style="font-size: 13px; color: var(--text-secondary); margin: 0">
+          Create a backup to get started.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  var panels = document.querySelectorAll(".dsp-panel");
+  var icons = document.querySelectorAll(".dsp-nav-icon");
+  function show(name) {
+    panels.forEach(function (p) {
+      p.style.display = p.dataset.panel === name ? "block" : "none";
+    });
+    icons.forEach(function (i) {
+      i.classList.toggle("active", i.dataset.panel === name);
+    });
+  }
+  icons.forEach(function (i) {
+    i.addEventListener("click", function () {
+      show(i.dataset.panel);
+    });
+  });
+  show("dashboard");
+</script>

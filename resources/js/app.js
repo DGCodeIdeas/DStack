@@ -13,6 +13,10 @@ const API = {
             options.body = JSON.stringify(payload);
         }
         const res = await fetch(url, options);
+        if (res.status === 401 || res.status === 302) {
+            location.href = '/login';
+            throw new Error('Unauthenticated');
+        }
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
             throw new Error(data.message || (data.errors ? Object.values(data.errors).flat().join(', ') : `HTTP ${res.status}`));
@@ -193,7 +197,6 @@ function initEventStream() {
             `;
             container.appendChild(card);
         }
-        qs('services-last-updated').textContent = `Updated ${new Date().toLocaleTimeString()}`;
     });
 
     source.addEventListener('vhosts', (e) => {

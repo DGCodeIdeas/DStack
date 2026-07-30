@@ -1,17 +1,28 @@
-# ===== Legacy single-instance service (kept for manual fallback) =====
-# The project now uses blue-green instances via dstack-panel@.service.
-# This legacy file documents the original single-instance configuration.
+# ===== Legacy single-instance service (replaced by dstack-panel@.service) =====
+# This file is kept for reference only.
+# The current architecture uses PHP-FPM + nginx instead of php artisan serve.
+# Blue-green instances are managed via dstack-panel@.service template
+# with nginx routing all requests to the active FPM pool.
 [Unit]
 Description=DStack Laravel Panel (legacy single-instance)
-After=network.target docker.service
+After=network.target php8.2-fpm.service nginx.service docker.service
+Requires=php8.2-fpm.service nginx.service
 
 [Service]
+Type=oneshot
 User=www-data
 WorkingDirectory=/opt/dstack-panel
-ExecStart=/usr/bin/php artisan serve --host=127.0.0.1 --port=5000
-Restart=always
-RestartSec=3
+EnvironmentFile=-/opt/dstack-panel/.env.production
 Environment=APP_ENV=production
+ExecStart=/bin/bash -c '\
+    cd /opt/dstack-panel && \
+    php artisan cache:clear --no-warmup && \
+    php artisan config:cache && \
+    php artisan route:cache && \
+    php artisan view:cache && \
+    /usr/bin/systemctl reload php8.2-fpm'
+ExecStop=/usr/bin/systemctl reload php8.2-fpm
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
