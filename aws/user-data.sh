@@ -303,8 +303,10 @@ if ! check_phase_done "app-deploy"; then
         fi
         log "Cloning repository: ${REPO_URL}"
         git clone "${REPO_URL}" "${ROOT}"
+        git config --global --add safe.directory "${ROOT}" 2>/dev/null || true
     else
         log "Repository already present — pulling latest"
+        git config --global --add safe.directory "${ROOT}" 2>/dev/null || true
         cd "${ROOT}"
         git fetch origin --tags --quiet
         git pull origin main --quiet || git pull origin master --quiet || true
@@ -315,6 +317,7 @@ if ! check_phase_done "app-deploy"; then
     mark_phase_done "app-deploy"
 else
     log "Phase 6 already complete — pulling latest"
+    git config --global --add safe.directory "${ROOT}" 2>/dev/null || true
     cd "${ROOT}"
     git fetch origin --tags --quiet
     git pull origin main --quiet || git pull origin master --quiet || true
@@ -734,6 +737,7 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
             git clone "${CHADA_DIGITAL_REPO}" "${CHADA_DIGITAL_ROOT}" 2>/dev/null || warn "Git clone failed for chada.digital"
         else
             log "Chada.digital repo already present — pulling latest"
+            git config --global --add safe.directory "${CHADA_DIGITAL_ROOT}" 2>/dev/null || true
             cd "${CHADA_DIGITAL_ROOT}"
             git fetch origin --tags --quiet
             git pull origin "${CHADA_DIGITAL_BRANCH}" --quiet || true
