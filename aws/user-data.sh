@@ -383,10 +383,10 @@ if ! check_phase_done "app-optimize"; then
     log "Generating APP_KEY if missing..."
     grep -q '^APP_KEY=base64:' "${ROOT}/.env" 2>/dev/null || php "${ROOT}/artisan" key:generate --force
     log "Caching Laravel config, routes, views, and events..."
-    php "${ROOT}/artisan" config:cache --force
-    php "${ROOT}/artisan" route:cache --force
-    php "${ROOT}/artisan" view:cache --force
-    php "${ROOT}/artisan" event:cache --force
+    php "${ROOT}/artisan" config:cache
+    php "${ROOT}/artisan" route:cache
+    php "${ROOT}/artisan" view:cache
+    php "${ROOT}/artisan" event:cache
     ok "Laravel cache optimized."
     mark_phase_done "app-optimize"
 else
@@ -769,10 +769,10 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
             chown -R www-data:www-data "${CHADA_DIGITAL_ROOT}/storage" "${CHADA_DIGITAL_ROOT}/bootstrap/cache"
             chmod -R 775 "${CHADA_DIGITAL_ROOT}/storage" "${CHADA_DIGITAL_ROOT}/bootstrap/cache"
 
-            php "${CHADA_DIGITAL_ROOT}/artisan" config:cache --force 2>/dev/null || true
-            php "${CHADA_DIGITAL_ROOT}/artisan" route:cache --force 2>/dev/null || true
-            php "${CHADA_DIGITAL_ROOT}/artisan" view:cache --force 2>/dev/null || true
-            php "${CHADA_DIGITAL_ROOT}/artisan" event:cache --force 2>/dev/null || true
+            php "${CHADA_DIGITAL_ROOT}/artisan" config:cache 2>/dev/null || true
+            php "${CHADA_DIGITAL_ROOT}/artisan" route:cache 2>/dev/null || true
+            php "${CHADA_DIGITAL_ROOT}/artisan" view:cache 2>/dev/null || true
+            php "${CHADA_DIGITAL_ROOT}/artisan" event:cache 2>/dev/null || true
 
             if [ "${DB_CONNECTION}" = "sqlite" ]; then
                 CHADA_DB_PATH="${CHADA_DIGITAL_ROOT}/storage/database/chada.db"
