@@ -1,4 +1,18 @@
 #!/bin/bash
+# -------------------------------------------------------------------------
+# AWS EC2 User-Data: DStack Panel Production Bootstrap (t3.small)
+# -------------------------------------------------------------------------
+# Deploys the DStack Panel Laravel app with PHP-FPM + nginx serving,
+# SSL, chada.digital app integration, and hardened security.
+#
+# Usage: sudo bash -s < aws/user-data.sh
+#        sudo bash /tmp/user-data.sh
+#
+# Idempotent: safe to re-run. Progress tracked via:
+#   /opt/dstack-panel/.checkpoints  — phase completion log
+#   /opt/dstack-panel/.deploy-status — current phase (JSON, read by API)
+# -------------------------------------------------------------------------
+
 set -euo pipefail
 
 # PS4 fallback for SSH stdin execution (empty BASH_SOURCE)
@@ -38,12 +52,25 @@ export DEBIAN_FRONTEND=noninteractive
 # Ensure ROOT directory exists early for checkpoint/status files
 mkdir -p "${ROOT}"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
+# Colors for pretty output
+if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ $(tput colors) -ge 8 ]]; then
+    RED=$(tput setaf 1)
+    GREEN=$(tput setaf 2)
+    YELLOW=$(tput setaf 3)
+    BLUE=$(tput setaf 4)
+    BOLD=$(tput bold)
+    RESET=$(tput sgr0)
+else
+    RED="" GREEN="" YELLOW="" BLUE="" BOLD="" RESET=""
+fi
 
-log_info()  { echo -e "${GREEN}[INFO]${NC}  $*"; record_checkpoint "INFO" "$*"; }
-log_warn()  { echo -e "${YELLOW}[WARN]${NC}  $*"; record_checkpoint "WARN" "$*"; }
-log_error() { echo -e "${RED}[ERROR]${NC} $*"; record_checkpoint "ERROR" "$*"; }
+log()    { echo -e "${BLUE}[INFO]${RESET} $*" | tee -a "${CHECKPOINT_FILE}.log"; }
+ok()     { echo -e "${GREEN}[ OK ]${RESET} $*" | tee -a "${CHECKPOINT_FILE}.log"; }
+warn()   { echo -e "${YELLOW}[WARN]${RESET} $*" | tee -a "${CHECKPOINT_FILE}.log"; }
+error()  { echo -e "${RED}[ERR ]${RESET} $*" | tee -a "${CHECKPOINT_FILE}.log"; }
+die()    { error "$*"; exit 1; }
 
+# --- Progress tracking ---
 record_checkpoint() {
     local level="$1" message="$2"
     local ts; ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -55,43 +82,70 @@ record_checkpoint() {
 set_current_phase() {
     CURRENT_PHASE="$1"
     record_checkpoint "PHASE_START" "Starting $1"
+    echo
+    log "=== Phase: ${BOLD}${CURRENT_PHASE}${RESET} ==="
+}
+
+mark_phase_done() {
+    echo "DONE:$1" >> "${CHECKPOINT_FILE}"
+    record_checkpoint "PHASE_DONE" "Completed $1"
 }
 
 check_phase_done() {
     grep -q "DONE:$1" "${CHECKPOINT_FILE}" 2>/dev/null
 }
 
-mark_phase_done() {
-    echo "DONE:$1" >> "${CHECKPOINT_FILE}"
-}
-
+# --- Idempotency helpers ---
 pkg_installed() { dpkg -l "$1" 2>/dev/null | grep -q "^ii"; }
 svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
 sock_exists() { [ -S "$1" ]; }
 
 # ===========================================================================
+# Preflight: OS check
+# ===========================================================================
+log "=== DStack Panel Production Bootstrap ==="
+echo
+log "Target: ${BOLD}${PANEL_SUBDOMAIN}${RESET}"
+log "PHP:    ${PHP_VERSION}"
+log "DB:     ${DB_CONNECTION}"
+log "Root:   ${ROOT}"
+echo
+
+if [ ! -f /etc/os-release ]; then
+    die "Cannot detect OS. This script targets Ubuntu 22.04/24.04."
+fi
+
+log "Operating system: $(grep '^PRETTY_NAME' /etc/os-release | cut -d= -f2 | tr -d '"')"
+log "Architecture:     $(uname -m)"
+log "Kernel:           $(uname -r)"
+echo
+
+# ===========================================================================
 # Phase 1: System Preparation
 # ===========================================================================
 set_current_phase "system-preparation"
-log_info "Phase 1: System preparation"
 
 if ! check_phase_done "system-preparation"; then
+    log "Updating package index..."
     apt-get update -qq
+    log "Upgrading existing packages..."
     apt-get upgrade -y -qq
+    log "Installing base packages..."
     apt-get install -y -qq curl git unzip ca-certificates gnupg lsb-release software-properties-common ufw fail2ban logrotate cron rsyslog
+    ok "Base packages installed."
     mark_phase_done "system-preparation"
 else
-    log_info "Phase 1 already complete — skipping"
+    ok "Phase 1 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 2: Swap Space
+# Phase 2: Swap Space (safety for t3.small with 2 GB RAM)
 # ===========================================================================
 set_current_phase "swap-configuration"
-log_info "Phase 2: Swap space"
 
 if ! check_phase_done "swap-configuration"; then
     if [ ! -f /swapfile ]; then
+        log "Creating 2 GB swap file..."
         fallocate -l 2G /swapfile
         chmod 600 /swapfile
         mkswap /swapfile
@@ -99,66 +153,83 @@ if ! check_phase_done "swap-configuration"; then
         echo '/swapfile none swap sw 0 0' >> /etc/fstab
         sysctl vm.swappiness=10
         echo 'vm.swappiness=10' >> /etc/sysctl.conf
+        ok "Swap activated: 2G at swappiness=10"
+    else
+        ok "Swap file already exists — skipping"
     fi
     mark_phase_done "swap-configuration"
 else
-    log_info "Phase 2 already complete — skipping"
+    ok "Phase 2 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 3: PHP
+# Phase 3: Install PHP ${PHP_VERSION} and Extensions
 # ===========================================================================
 set_current_phase "php-install"
-log_info "Phase 3: PHP ${PHP_VERSION}"
 
 if ! check_phase_done "php-install"; then
+    log "Adding PHP PPA (ondrej/php)..."
     if ! grep -q "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
         add-apt-repository ppa:ondrej/php -y
         apt-get update -qq
     fi
+    log "Installing PHP ${PHP_VERSION} and extensions..."
     apt-get install -y -qq php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-sqlite3 php${PHP_VERSION}-pdo php${PHP_VERSION}-pdo-sqlite php${PHP_VERSION}-xml php${PHP_VERSION}-mbstring php${PHP_VERSION}-curl php${PHP_VERSION}-zip php${PHP_VERSION}-bcmath php${PHP_VERSION}-intl php${PHP_VERSION}-gd php${PHP_VERSION}-redis php${PHP_VERSION}-tokenizer php${PHP_VERSION}-fileinfo
+    ok "PHP ${PHP_VERSION} installed."
 
     PHP_FPM_SOCK="/var/run/php/php${PHP_VERSION}-fpm.sock"
     if ! sock_exists "${PHP_FPM_SOCK}"; then
-        for sock in "/run/php/php${PHP_VERSION}-fpm.sock" "/var/run/php/php${PHP_VERSION}-fpm.sock"; do
-            if sock_exists "${sock}"; then PHP_FPM_SOCK="${sock}"; break; fi
+        for sock in "/run/php/php${PHP_VERSION}-fpm.sock" "/var/run/php/php${PHP_VERSION}-fpm.sock" "/run/php-fpm${PHP_VERSION}.sock"; do
+            if sock_exists "${sock}"; then
+                PHP_FPM_SOCK="${sock}"
+                break
+            fi
         done
     fi
+    log "PHP-FPM socket: ${PHP_FPM_SOCK}"
     mark_phase_done "php-install"
 else
-    log_info "Phase 3 already complete — skipping"
+    ok "Phase 3 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 4: Docker
+# Phase 4: Install Docker + Compose v2
 # ===========================================================================
 set_current_phase "docker-install"
-log_info "Phase 4: Docker"
 
 if ! check_phase_done "docker-install"; then
     if ! command -v docker &>/dev/null; then
+        log "Installing Docker..."
         curl -fsSL https://get.docker.com | sh
         systemctl enable --now docker
+        ok "Docker installed and enabled."
+    else
+        ok "Docker already installed: $(docker --version)"
     fi
     if ! docker compose version &>/dev/null; then
+        log "Installing Docker Compose plugin..."
         apt-get install -y -qq docker-compose-plugin
+        ok "Docker Compose plugin installed."
+    else
+        ok "Docker Compose already installed."
     fi
     if ! getent group docker | grep -qw www-data; then
         usermod -aG docker www-data
+        log "Added www-data to docker group."
     fi
     mark_phase_done "docker-install"
 else
-    log_info "Phase 4 already complete — skipping"
+    ok "Phase 4 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 5: Composer
+# Phase 5: Install Composer (global)
 # ===========================================================================
 set_current_phase "composer-install"
-log_info "Phase 5: Composer"
 
 if ! check_phase_done "composer-install"; then
     if ! command -v composer &>/dev/null; then
+        log "Downloading and installing Composer..."
         EXPECTED_CHECKSUM="$(curl -sL https://composer.github.io/installer.sig)"
         php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
         ACTUAL_CHECKSUM="$(php -r "echo hash_file('sha384', 'composer-setup.php');")"
@@ -170,34 +241,40 @@ if ! check_phase_done "composer-install"; then
         php composer-setup.php --install-dir=/usr/local/bin --filename=composer
         rm -f composer-setup.php
         chmod +x /usr/local/bin/composer
+        ok "Composer installed globally."
+    else
+        ok "Composer already installed: $(composer --version 2>/dev/null | head -1)"
     fi
     mark_phase_done "composer-install"
 else
-    log_info "Phase 5 already complete — skipping"
+    ok "Phase 5 already complete — skipping"
 fi
 
 # ===========================================================================
 # Phase 6: Deploy Application Code
 # ===========================================================================
 set_current_phase "app-deploy"
-log_info "Phase 6: Deploying application"
 
 if ! check_phase_done "app-deploy"; then
+    log "Deploying application code to ${ROOT}..."
     mkdir -p "${ROOT}"
     chown -R ubuntu:www-data "${ROOT}"
     chmod -R 775 "${ROOT}"
     if [ ! -d "${ROOT}/.git" ]; then
+        log "Cloning repository: ${REPO_URL}"
         git clone "${REPO_URL}" "${ROOT}"
     else
+        log "Repository already present — pulling latest"
         cd "${ROOT}"
         git fetch origin --tags --quiet
         git pull origin main --quiet || git pull origin master --quiet || true
     fi
     cd "${ROOT}"
     chown -R www-data:www-data "${ROOT}"
+    ok "Application code deployed."
     mark_phase_done "app-deploy"
 else
-    log_info "Phase 6 already complete — pulling latest"
+    log "Phase 6 already complete — pulling latest"
     cd "${ROOT}"
     git fetch origin --tags --quiet
     git pull origin main --quiet || git pull origin master --quiet || true
@@ -205,25 +282,26 @@ else
 fi
 
 # ===========================================================================
-# Phase 7: PHP Dependencies
+# Phase 7: Install PHP Dependencies (Production)
 # ===========================================================================
 set_current_phase "dependencies-install"
-log_info "Phase 7: Dependencies"
 
 if ! check_phase_done "dependencies-install"; then
+    log "Installing PHP dependencies (production, no-dev)..."
     composer install --no-dev --optimize-autoloader --no-interaction --working-dir="${ROOT}" 2>&1 | tail -5
+    ok "PHP dependencies installed."
     mark_phase_done "dependencies-install"
 else
-    log_info "Phase 7 already complete — skipping"
+    ok "Phase 7 already complete — skipping"
 fi
 
 # ===========================================================================
 # Phase 8: Configure .env
 # ===========================================================================
 set_current_phase "env-config"
-log_info "Phase 8: Environment configuration"
 
 if ! check_phase_done "env-config"; then
+    log "Configuring environment..."
     [ -f "${ROOT}/.env" ] || cp "${ROOT}/.env.example" "${ROOT}/.env"
     sed -i "s|^APP_ENV=.*|APP_ENV=${APP_ENV}|" "${ROOT}/.env"
     sed -i "s|^APP_URL=.*|APP_URL=https://${PANEL_SUBDOMAIN}|" "${ROOT}/.env"
@@ -247,66 +325,73 @@ if ! check_phase_done "env-config"; then
     mkdir -p "${ROOT}/storage/logs" "${ROOT}/storage/framework/cache" "${ROOT}/storage/framework/sessions" "${ROOT}/storage/framework/views" "${ROOT}/bootstrap/cache"
     chown -R www-data:www-data "${ROOT}/storage" "${ROOT}/bootstrap/cache" "${VHOSTS_DIR}" "${SSL_DIR}" "${PROJECTS_DIR}" "${BACKUPS_DIR}" 2>/dev/null || true
     chmod -R 775 "${ROOT}/storage" "${ROOT}/bootstrap/cache"
+    ok "Environment configured."
     mark_phase_done "env-config"
 else
-    log_info "Phase 8 already complete — skipping"
+    ok "Phase 8 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 9: App Key + Optimization
+# Phase 9: Application Key + Optimization
 # ===========================================================================
 set_current_phase "app-optimize"
-log_info "Phase 9: App key and optimization"
 
 if ! check_phase_done "app-optimize"; then
+    log "Generating APP_KEY if missing..."
     grep -q '^APP_KEY=base64:' "${ROOT}/.env" 2>/dev/null || php "${ROOT}/artisan" key:generate --force
+    log "Caching Laravel config, routes, views, and events..."
     php "${ROOT}/artisan" config:cache --force
     php "${ROOT}/artisan" route:cache --force
     php "${ROOT}/artisan" view:cache --force
     php "${ROOT}/artisan" event:cache --force
+    ok "Laravel cache optimized."
     mark_phase_done "app-optimize"
 else
-    log_info "Phase 9 already complete — skipping"
+    ok "Phase 9 already complete — skipping"
 fi
 
 # ===========================================================================
 # Phase 10: Database Migrations
 # ===========================================================================
 set_current_phase "database-migrate"
-log_info "Phase 10: Migrations"
 
 if ! check_phase_done "database-migrate"; then
     if [ "${DB_CONNECTION}" = "sqlite" ] && [ -f "${DB_PATH}" ]; then
-        php "${ROOT}/artisan" migrate --force 2>&1 | tail -3 || log_warn "Migration may have failed"
+        log "Running database migrations (SQLite)..."
+        php "${ROOT}/artisan" migrate --force 2>&1 | tail -3 || warn "Migration may have failed — check logs"
+        ok "Migrations complete."
+    else
+        log "Not using SQLite — skipping migrations."
     fi
     mark_phase_done "database-migrate"
 else
-    log_info "Phase 10 already complete — skipping"
+    ok "Phase 10 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 11: SSL Setup
+# Phase 11: SSL Certificates (Let's Encrypt)
 # ===========================================================================
 set_current_phase "ssl-setup"
-log_info "Phase 11: SSL setup"
 
 if ! check_phase_done "ssl-setup"; then
+    log "Installing Certbot..."
     apt-get install -y -qq certbot python3-certbot-nginx
     mkdir -p "${SSL_DIR}"
     chown -R www-data:www-data "${SSL_DIR}"
     systemctl enable --now nginx || true
+    SSL_CERT_READY=false
     mark_phase_done "ssl-setup"
 else
-    log_info "Phase 11 already complete — skipping"
+    ok "Phase 11 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 12: PHP-FPM Tuning
+# Phase 12: PHP-FPM Tuning for 2 GB RAM (t3.small)
 # ===========================================================================
 set_current_phase "php-fpm-tune"
-log_info "Phase 12: PHP-FPM tuning"
 
 if ! check_phase_done "php-fpm-tune"; then
+    log "Tuning PHP-FPM for 2 GB RAM..."
     FPM_CONF="/etc/php/${PHP_VERSION}/fpm/pool.d/www.conf"
     if [ -f "${FPM_CONF}" ]; then
         sed -i 's/^pm = .*/pm = dynamic/' "${FPM_CONF}"
@@ -316,21 +401,25 @@ if ! check_phase_done "php-fpm-tune"; then
         sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 4/' "${FPM_CONF}"
         sed -i 's/^pm.max_requests = .*/pm.max_requests = 1000/' "${FPM_CONF}"
         systemctl restart "php${PHP_VERSION}-fpm"
+        ok "PHP-FPM tuned: pm=dynamic, max_children=6"
+    else
+        warn "PHP-FPM config not found at ${FPM_CONF} — skipping tuning"
     fi
     mark_phase_done "php-fpm-tune"
 else
-    log_info "Phase 12 already complete — skipping"
+    ok "Phase 12 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 13: Nginx Configuration
+# Phase 13: Nginx + PHP-FPM (Direct PHP Serving)
 # ===========================================================================
 set_current_phase "nginx-config"
-log_info "Phase 13: Nginx configuration"
 
 if ! check_phase_done "nginx-config"; then
+    log "Configuring nginx + PHP-FPM (direct serving)..."
     rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
     rm -f /etc/nginx/conf.d/upstreams.conf 2>/dev/null || true
+
     FPM_POOL_CONF="/etc/php/${PHP_VERSION}/fpm/pool.d/dstack.conf"
     mkdir -p /etc/php/${PHP_VERSION}/fpm/pool.d
     cat > "${FPM_POOL_CONF}" << FPM_POOL_EOF
@@ -354,6 +443,7 @@ env[APP_ENV] = production
 env[APP_DEBUG] = false
 FPM_POOL_EOF
     sed -i 's/^pm = .*/pm = off/' /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf 2>/dev/null || true
+
     NGINX_CONF="/etc/nginx/sites-available/${PANEL_SUBDOMAIN}.conf"
     mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
     cat > "${NGINX_CONF}" << NGINX_CONF_EOF
@@ -393,47 +483,69 @@ server {
 }
 NGINX_CONF_EOF
     ln -sf "${NGINX_CONF}" "/etc/nginx/sites-enabled/${PANEL_SUBDOMAIN}.conf"
-    nginx -t 2>/dev/null && (systemctl enable --now nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true)
+    if nginx -t 2>/dev/null; then
+        systemctl enable --now nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+        ok "Nginx configured with PHP-FPM (direct serving)."
+    else
+        warn "Nginx config test failed — will retry after SSL certificate is obtained"
+    fi
     mark_phase_done "nginx-config"
 else
-    log_info "Phase 13 already complete — skipping"
+    ok "Phase 13 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 14: Let's Encrypt SSL
+# Phase 14: SSL/TLS with Let's Encrypt
 # ===========================================================================
 set_current_phase "ssl-letsencrypt"
-log_info "Phase 14: Let's Encrypt"
 
 if ! check_phase_done "ssl-letsencrypt"; then
+    log "Obtaining Let's Encrypt SSL certificate for ${PANEL_SUBDOMAIN}..."
     SSL_CERT_READY=false
     if certbot certonly --nginx --non-interactive --agree-tos --email "admin@${PANEL_SUBDOMAIN}" -d "${PANEL_SUBDOMAIN}" --rsa-key-size 4096 --force-renewal 2>/dev/null; then
         SSL_CERT_READY=true
+        log "SSL certificate obtained for ${PANEL_SUBDOMAIN}"
         systemctl reload nginx 2>/dev/null || true
         (crontab -l 2>/dev/null; echo "0 3 * * * /usr/bin/certbot renew --quiet --post-hook 'systemctl reload nginx'") | crontab -
+        log "Certbot auto-renewal cron job configured."
+        ok "SSL certificate ready."
     else
-        log_warn "SSL certificate could not be obtained — ensure DNS ${PANEL_SUBDOMAIN} points to this instance"
+        warn "SSL certificate could not be obtained — ensure DNS ${PANEL_SUBDOMAIN} points to this instance"
+        warn "Run manually: certbot certonly --nginx -d ${PANEL_SUBDOMAIN}"
     fi
     mark_phase_done "ssl-letsencrypt"
 else
-    log_info "Phase 14 already complete — skipping"
+    ok "Phase 14 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 15: Firewall + Fail2ban
+# Phase 15: Firewall Hardening (UFW)
 # ===========================================================================
 set_current_phase "firewall-config"
-log_info "Phase 15: Firewall and Fail2ban"
 
 if ! check_phase_done "firewall-config"; then
+    log "Configuring firewall (UFW)..."
     ufw --force reset
     ufw default deny incoming
     ufw default allow outgoing
-    ufw allow 22/tcp
-    ufw allow 80/tcp
-    ufw allow 443/tcp
+    ufw allow 22/tcp comment 'SSH'
+    ufw allow 80/tcp comment 'HTTP'
+    ufw allow 443/tcp comment 'HTTPS'
     echo "y" | ufw enable
     ufw limit 22/tcp 2>/dev/null || true
+    ok "Firewall enabled: SSH(22), HTTP(80), HTTPS(443) allowed"
+    mark_phase_done "firewall-config"
+else
+    ok "Phase 15 already complete — skipping"
+fi
+
+# ===========================================================================
+# Phase 16: Fail2ban for SSH Protection
+# ===========================================================================
+set_current_phase "fail2ban-config"
+
+if ! check_phase_done "fail2ban-config"; then
+    log "Configuring Fail2ban..."
     cat > /etc/fail2ban/jail.local << FAIL2BAN_EOF
 [DEFAULT]
 banaction = iptables-multiport
@@ -450,18 +562,19 @@ maxretry = 3
 bantime = 3600
 FAIL2BAN_EOF
     systemctl enable --now fail2ban || true
-    mark_phase_done "firewall-config"
+    ok "Fail2ban enabled with SSH brute-force protection (3 attempts / 1 hour ban)"
+    mark_phase_done "fail2ban-config"
 else
-    log_info "Phase 15 already complete — skipping"
+    ok "Phase 16 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 16: Log Rotation + Cron
+# Phase 17: Log Rotation
 # ===========================================================================
-set_current_phase "log-cron-config"
-log_info "Phase 16: Log rotation and cron"
+set_current_phase "log-rotation"
 
-if ! check_phase_done "log-cron-config"; then
+if ! check_phase_done "log-rotation"; then
+    log "Configuring log rotation..."
     cat > /etc/logrotate.d/dstack-panel << LOGROTATE_EOF
 /opt/dstack-panel/storage/logs/*.log {
     daily
@@ -490,65 +603,105 @@ if ! check_phase_done "log-cron-config"; then
     endscript
 }
 LOGROTATE_EOF
-    (crontab -u www-data -l 2>/dev/null | grep -v 'artisan schedule'; echo "* * * * * cd /opt/dstack-panel && php artisan schedule:run >> /opt/dstack-panel/storage/logs/scheduler.log 2>&1") | crontab -u www-data -
-    mark_phase_done "log-cron-config"
+    ok "Log rotation configured (14 days for app logs, 7 days for supervisor)"
+    mark_phase_done "log-rotation"
 else
-    log_info "Phase 16 already complete — skipping"
+    ok "Phase 17 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 17: Start Services
+# Phase 18: Cron Jobs for Laravel Scheduler
+# ===========================================================================
+set_current_phase "cron-config"
+
+if ! check_phase_done "cron-config"; then
+    log "Configuring Laravel scheduler cron..."
+    (crontab -u www-data -l 2>/dev/null | grep -v 'artisan schedule'; echo "* * * * * cd /opt/dstack-panel && php artisan schedule:run >> /opt/dstack-panel/storage/logs/scheduler.log 2>&1") | crontab -u www-data -
+    ok "Laravel scheduler cron configured for www-data user"
+    mark_phase_done "cron-config"
+else
+    ok "Phase 18 already complete — skipping"
+fi
+
+# ===========================================================================
+# Phase 19: Start Application Services
 # ===========================================================================
 set_current_phase "services-start"
-log_info "Phase 17: Starting services"
 
 if ! check_phase_done "services-start"; then
+    log "Starting application services..."
     if [ -f "${COMPOSE_FILE}" ]; then
         cd "${ROOT}"
-        sudo -u www-data docker compose up -d --remove-orphans 2>/dev/null || log_warn "Docker Compose stack start failed"
+        sudo -u www-data docker compose up -d --remove-orphans 2>/dev/null || warn "Docker Compose stack start failed — check ${COMPOSE_FILE}"
     fi
+    ok "Services started."
     mark_phase_done "services-start"
 else
-    log_info "Phase 17 already complete — skipping"
+    ok "Phase 19 already complete — skipping"
 fi
 
 # ===========================================================================
-# Phase 18: Health Check
+# Phase 20: Health Check Verification
 # ===========================================================================
 set_current_phase "health-check"
-log_info "Phase 18: Health verification"
-
+log "Running health verification..."
 sleep 3
-pgrep -x "php-fpm${PHP_VERSION}" > /dev/null || systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
-systemctl is-active --quiet nginx || systemctl restart nginx 2>/dev/null || true
-docker info > /dev/null 2>&1 || systemctl restart docker 2>/dev/null || true
+
+if pgrep -x "php-fpm${PHP_VERSION}" > /dev/null; then
+    ok "PHP-FPM ${PHP_VERSION}: running"
+else
+    warn "PHP-FPM ${PHP_VERSION}: not running — attempting restart"
+    systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
+fi
+
+if systemctl is-active --quiet nginx; then
+    ok "Nginx: running"
+else
+    warn "Nginx: not running — attempting restart"
+    systemctl restart nginx 2>/dev/null || true
+fi
+
+if docker info > /dev/null 2>&1; then
+    ok "Docker: running"
+else
+    warn "Docker: not running — attempting restart"
+    systemctl restart docker 2>/dev/null || true
+fi
+
 if [ "${DB_CONNECTION}" = "sqlite" ] && [ -f "${DB_PATH}" ]; then
-    log_info "SQLite database: ready"
+    ok "SQLite database: ready"
 fi
 
 # ===========================================================================
-# Phase 19: Chada.digital App Deployment
+# Phase 21: Chada.digital App Deployment
 # ===========================================================================
 if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
     set_current_phase "chada-digital-deploy"
-    log_info "Phase 19: Deploying chada.digital"
+    log "Deploying chada.digital application..."
 
     if ! check_phase_done "chada-digital-deploy"; then
         mkdir -p "${CHADA_DIGITAL_ROOT}"
         chown -R www-data:www-data "${CHADA_DIGITAL_ROOT}"
+
         if [ ! -d "${CHADA_DIGITAL_ROOT}/.git" ]; then
-            git clone "${CHADA_DIGITAL_REPO}" "${CHADA_DIGITAL_ROOT}" 2>/dev/null || log_warn "Git clone failed for chada.digital"
+            log "Cloning chada.digital repository: ${CHADA_DIGITAL_REPO}"
+            git clone "${CHADA_DIGITAL_REPO}" "${CHADA_DIGITAL_ROOT}" 2>/dev/null || warn "Git clone failed for chada.digital"
         else
+            log "Chada.digital repo already present — pulling latest"
             cd "${CHADA_DIGITAL_ROOT}"
             git fetch origin --tags --quiet
             git pull origin "${CHADA_DIGITAL_BRANCH}" --quiet || true
         fi
+
         if [ -d "${CHADA_DIGITAL_ROOT}" ]; then
             cd "${CHADA_DIGITAL_ROOT}"
             chown -R www-data:www-data "${CHADA_DIGITAL_ROOT}"
+
             if [ -f "${CHADA_DIGITAL_ROOT}/composer.json" ]; then
-                composer install --no-dev --optimize-autoloader --no-interaction --working-dir="${CHADA_DIGITAL_ROOT}" 2>&1 | tail -5 || log_warn "Composer install failed for chada.digital"
+                log "Installing chada.digital PHP dependencies..."
+                composer install --no-dev --optimize-autoloader --no-interaction --working-dir="${CHADA_DIGITAL_ROOT}" 2>&1 | tail -5 || warn "Composer install failed for chada.digital"
             fi
+
             if [ -f "${CHADA_DIGITAL_ROOT}/.env" ]; then
                 grep -q '^APP_KEY=base64:' "${CHADA_DIGITAL_ROOT}/.env" 2>/dev/null || php "${CHADA_DIGITAL_ROOT}/artisan" key:generate --force 2>/dev/null || true
                 sed -i "s|^APP_ENV=.*|APP_ENV=production|" "${CHADA_DIGITAL_ROOT}/.env"
@@ -561,20 +714,24 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
                 sed -i "s|^APP_URL=.*|APP_URL=https://${CHADA_DIGITAL_SUBDOMAIN}|" "${CHADA_DIGITAL_ROOT}/.env"
                 sed -i "s|^APP_DEBUG=.*|APP_DEBUG=false|" "${CHADA_DIGITAL_ROOT}/.env"
             fi
+
             mkdir -p "${CHADA_DIGITAL_ROOT}/storage/logs" "${CHADA_DIGITAL_ROOT}/storage/framework/cache" "${CHADA_DIGITAL_ROOT}/storage/framework/sessions" "${CHADA_DIGITAL_ROOT}/storage/framework/views" "${CHADA_DIGITAL_ROOT}/bootstrap/cache"
             chown -R www-data:www-data "${CHADA_DIGITAL_ROOT}/storage" "${CHADA_DIGITAL_ROOT}/bootstrap/cache"
             chmod -R 775 "${CHADA_DIGITAL_ROOT}/storage" "${CHADA_DIGITAL_ROOT}/bootstrap/cache"
+
             php "${CHADA_DIGITAL_ROOT}/artisan" config:cache --force 2>/dev/null || true
             php "${CHADA_DIGITAL_ROOT}/artisan" route:cache --force 2>/dev/null || true
             php "${CHADA_DIGITAL_ROOT}/artisan" view:cache --force 2>/dev/null || true
             php "${CHADA_DIGITAL_ROOT}/artisan" event:cache --force 2>/dev/null || true
+
             if [ "${DB_CONNECTION}" = "sqlite" ]; then
                 CHADA_DB_PATH="${CHADA_DIGITAL_ROOT}/storage/database/chada.db"
                 mkdir -p "${CHADA_DIGITAL_ROOT}/storage/database"
                 touch "${CHADA_DB_PATH}"
                 chown www-data:www-data "${CHADA_DB_PATH}"
-                php "${CHADA_DIGITAL_ROOT}/artisan" migrate --force 2>/dev/null || log_warn "Chada.digital migrations may have failed"
+                php "${CHADA_DIGITAL_ROOT}/artisan" migrate --force 2>/dev/null || warn "Chada.digital migrations may have failed"
             fi
+
             CHADA_NGINX_CONF="/etc/nginx/sites-available/${CHADA_DIGITAL_SUBDOMAIN}.conf"
             cat > "${CHADA_NGINX_CONF}" << CHADA_NGINX_EOF
 server {
@@ -613,20 +770,28 @@ server {
 }
 CHADA_NGINX_EOF
             ln -sf "${CHADA_NGINX_CONF}" "/etc/nginx/sites-enabled/${CHADA_DIGITAL_SUBDOMAIN}.conf"
-            nginx -t 2>/dev/null && systemctl reload nginx 2>/dev/null || true
-            if certbot certonly --nginx --non-interactive --agree-tos --email "admin@${CHADA_DIGITAL_SUBDOMAIN}" -d "${CHADA_DIGITAL_SUBDOMAIN}" --rsa-key-size 4096 --force-renewal 2>/dev/null; then
-                log_info "SSL certificate obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
+            if nginx -t 2>/dev/null; then
                 systemctl reload nginx 2>/dev/null || true
+                ok "Chada.digital nginx vhost configured for ${CHADA_DIGITAL_SUBDOMAIN}"
             else
-                log_warn "SSL certificate could not be obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
+                warn "Chada.digital nginx config test failed — will retry after SSL is obtained"
             fi
-            log_info "Chada.digital app deployment complete"
+
+            if certbot certonly --nginx --non-interactive --agree-tos --email "admin@${CHADA_DIGITAL_SUBDOMAIN}" -d "${CHADA_DIGITAL_SUBDOMAIN}" --rsa-key-size 4096 --force-renewal 2>/dev/null; then
+                log "SSL certificate obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
+                systemctl reload nginx 2>/dev/null || true
+                ok "Chada.digital SSL certificate ready."
+            else
+                warn "SSL certificate could not be obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
+            fi
+
+            ok "Chada.digital app deployment complete"
         else
-            log_warn "Chada.digital repo not available — skipping"
+            warn "Chada.digital repo not available — skipping deployment"
         fi
         mark_phase_done "chada-digital-deploy"
     else
-        log_info "Phase 19 already complete — skipping"
+        ok "Phase 21 already complete — skipping"
     fi
 fi
 
@@ -634,22 +799,28 @@ fi
 # Final Output
 # ===========================================================================
 set_current_phase "complete"
-log_info "========================================="
-log_info " DStack Panel bootstrap complete"
-log_info "========================================="
-log_info "  Application root: ${ROOT}"
-log_info "  Panel URL: https://${PANEL_SUBDOMAIN}"
-log_info "  PHP version: ${PHP_VERSION}"
-log_info "  Database: ${DB_CONNECTION}"
-log_info "  SSL ready: ${SSL_CERT_READY:-false}"
-log_info "========================================="
-log_info " Next steps:"
-log_info "  1. Update DNS ${PANEL_SUBDOMAIN} → this instance's public IP"
+echo
+log "========================================="
+log " DStack Panel bootstrap complete"
+log "========================================="
+log "  Application root: ${ROOT}"
+log "  Panel URL: https://${PANEL_SUBDOMAIN}"
+log "  PHP version: ${PHP_VERSION}"
+log "  Database: ${DB_CONNECTION}"
+log "  SSL ready: ${SSL_CERT_READY:-false}"
+log "  Docker Compose stack: $(docker compose -f ${COMPOSE_FILE} ps 2>/dev/null | grep -c running || echo 0) running"
 if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
-    log_info "  2. Update DNS ${CHADA_DIGITAL_SUBDOMAIN} → this instance's public IP"
+    log "  Chada.digital URL: https://${CHADA_DIGITAL_SUBDOMAIN}"
 fi
-log_info "  3. If SSL failed, run: certbot certonly --nginx -d ${PANEL_SUBDOMAIN}"
-log_info "  4. Check logs: tail -f ${ROOT}/storage/logs/laravel.log"
-log_info "========================================="
+log ""
+log " Next steps:"
+log "  1. Update DNS ${PANEL_SUBDOMAIN} → this instance's public IP"
+if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
+    log "  2. Update DNS ${CHADA_DIGITAL_SUBDOMAIN} → this instance's public IP"
+fi
+log "  3. If SSL failed, run: certbot certonly --nginx -d ${PANEL_SUBDOMAIN}"
+log "  4. Check logs: tail -f ${ROOT}/storage/logs/laravel.log"
+log "  5. Check progress: cat ${DEPLOY_STATUS_FILE}"
+log "========================================="
 
 echo "{\"phase\":\"complete\",\"status\":\"done\",\"finished_at\":\"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}" > "${DEPLOY_STATUS_FILE}"
