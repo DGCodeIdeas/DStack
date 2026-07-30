@@ -288,6 +288,10 @@ if ! check_phase_done "app-deploy"; then
     chown -R ubuntu:www-data "${ROOT}"
     chmod -R 775 "${ROOT}"
     if [ ! -d "${ROOT}/.git" ]; then
+        if [ -d "${ROOT}" ] && [ -n "$(ls -A "${ROOT}" 2>/dev/null)" ]; then
+            log "Directory ${ROOT} exists but is not a git repo — removing for clean clone"
+            rm -rf "${ROOT}"
+        fi
         log "Cloning repository: ${REPO_URL}"
         git clone "${REPO_URL}" "${ROOT}"
     else
@@ -711,6 +715,10 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
         chown -R www-data:www-data "${CHADA_DIGITAL_ROOT}"
 
         if [ ! -d "${CHADA_DIGITAL_ROOT}/.git" ]; then
+            if [ -d "${CHADA_DIGITAL_ROOT}" ] && [ -n "$(ls -A "${CHADA_DIGITAL_ROOT}" 2>/dev/null)" ]; then
+                log "Directory ${CHADA_DIGITAL_ROOT} exists but is not a git repo — removing for clean clone"
+                rm -rf "${CHADA_DIGITAL_ROOT}"
+            fi
             log "Cloning chada.digital repository: ${CHADA_DIGITAL_REPO}"
             git clone "${CHADA_DIGITAL_REPO}" "${CHADA_DIGITAL_ROOT}" 2>/dev/null || warn "Git clone failed for chada.digital"
         else
