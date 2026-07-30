@@ -26,7 +26,7 @@ fi
 PANEL_SUBDOMAIN="${PANEL_SUBDOMAIN:-panel.chadadigital.com}"
 APP_ENV="${APP_ENV:-production}"
 DB_CONNECTION="${DB_CONNECTION:-sqlite}"
-PHP_VERSION="${PHP_VERSION:-8.2}"
+PHP_VERSION="${PHP_VERSION:-8.5}"
 NGINX_PORT="${NGINX_PORT:-80}"
 SSL_PORT="${SSL_PORT:-443}"
 CHADA_DIGITAL_ENABLED="${CHADA_DIGITAL_ENABLED:-true}"
@@ -166,6 +166,13 @@ fi
 # Phase 3: Install PHP ${PHP_VERSION} and Extensions
 # ===========================================================================
 set_current_phase "php-install"
+
+# Check if installed PHP version matches required version
+INSTALLED_PHP=$(php -r 'echo PHP_MAJOR_VERSION . "." . PHP_MINOR_VERSION;' 2>/dev/null || echo "none")
+if [ "${INSTALLED_PHP}" != "${PHP_VERSION}" ]; then
+    log "Installed PHP ${INSTALLED_PHP} does not match required ${PHP_VERSION} — resetting checkpoint"
+    sed -i '/DONE:php-install/d' "${CHECKPOINT_FILE}" 2>/dev/null || true
+fi
 
 if ! check_phase_done "php-install"; then
     log "Setting up PHP repository (packages.sury.org)..."
