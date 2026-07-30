@@ -200,11 +200,30 @@ label { display: block; font-size: 12px; color: var(--text-muted); margin-bottom
     margin-top: 24px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
     color: var(--text-muted);
     font-size: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
+    gap: 16px;
+    flex-wrap: wrap;
 }
+
+.deploy-status,
+.chada-status {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+    font-size: 12px;
+}
+
+.deploy-status.status-complete,
+.chada-status.status-complete { color: var(--success); }
+.deploy-status.status-in-progress,
+.chada-status.status-in-progress { color: var(--warning); }
+.deploy-status.status-unknown,
+.chada-status.status-unknown { color: var(--text-muted); }
+.chada-status.status-error { color: var(--danger); }
 
 /* ────────────────────────────────────
    Loading & Splash Tokens

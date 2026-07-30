@@ -723,14 +723,112 @@ function initLogout() {
 }
 
 /* ────────────────────────────────────
-   Boot
-   ──────────────────────────────────── */
+    Deploy Status
+    ──────────────────────────────────── */
+async function initDeployStatus() {
+    try {
+        const data = await API.get('/api/deploy-status');
+        const el = qs('deploy-status');
+        if (!el) return;
+
+        if (data.status === 'complete') {
+            el.className = 'deploy-status status-complete';
+            el.innerHTML = `<span class="status-dot status-running"></span><span>Deployment Complete</span>`;
+        } else if (data.status === 'in_progress') {
+            el.className = 'deploy-status status-in-progress';
+            el.innerHTML = `<span class="status-dot status-unknown"></span><span>Deploying: ${data.current_phase || 'unknown'}</span>`;
+        } else {
+            el.className = 'deploy-status status-unknown';
+            el.innerHTML = `<span class="status-dot status-unknown"></span><span>Deployment Unknown</span>`;
+        }
+
+        const phaseEl = qs('deploy-phase');
+        if (phaseEl && data.current_phase) {
+            phaseEl.textContent = data.current_phase;
+        }
+    } catch (e) {
+        const el = qs('deploy-status');
+        if (el) {
+            el.className = 'deploy-status status-unknown';
+            el.innerHTML = `<span class="status-dot status-unknown"></span><span>Status Unavailable</span>`;
+        }
+    }
+}
+
+/* ────────────────────────────────────
+    Chada.digital Status
+    ──────────────────────────────────── */
+async function initChadaDigitalStatus() {
+    try {
+        const data = await API.get('/api/deploy-status');
+        const el = qs('chada-digital-status');
+        if (!el) return;
+
+        const hasChadaPhase = data.entries && data.entries.some(
+            (e) => e.phase === 'chada-digital-deploy'
+        );
+
+        if (hasChadaPhase) {
+            el.style.display = '';
+            const chadaEntry = data.entries
+                .filter((e) => e.phase === 'chada-digital-deploy')
+                .pop();
+
+            if (chadaEntry && chadaEntry.level === 'INFO' && chadaEntry.message && chadaEntry.message.includes('complete')) {
+                el.className = 'chada-status status-complete';
+                el.innerHTML = '<span class="status-dot status-running"></span><span>Chada.digital: Active</span>';
+            } else if (chadaEntry && chadaEntry.level === 'ERROR') {
+                el.className = 'chada-status status-error';
+                el.innerHTML = '<span class="status-dot status-stopped"></span><span>Chada.digital: Error</span>';
+            } else {
+                el.className = 'chada-status status-in-progress';
+                el.innerHTML = '<span class="status-dot status-unknown"></span><span>Chada.digital: Deploying</span>';
+            }
+        } else {
+            el.style.display = 'none';
+        }
+    } catch (e) {
+        const el = qs('chada-digital-status');
+        if (el) el.style.display = 'none';
+    }
+}
+
+function injectDeployStatusUI() {
+    const footer = qs('.app-footer');
+    if (!footer) return;
+
+    const existing = qs('#deploy-status');
+    if (existing) return;
+
+    const deployEl = document.createElement('span');
+    deployEl.id = 'deploy-status';
+    deployEl.className = 'deploy-status status-unknown';
+    deployEl.innerHTML = '<span class="status-dot status-unknown"></span><span>Checking deployment...</span>';
+
+    const chadaEl = document.createElement('span');
+    chadaEl.id = 'chada-digital-status';
+    chadaEl.className = 'chada-status status-unknown';
+    chadaEl.style.display = 'none';
+    chadaEl.innerHTML = '<span class="status-dot status-unknown"></span><span>Chada.digital: Unknown</span>';
+
+    footer.appendChild(deployEl);
+    footer.appendChild(chadaEl);
+}
+
+/* ────────────────────────────────────
+    Boot
+    ──────────────────────────────────── */
 Splash.init();
 Splash.setStatus('Checking API...');
 Splash.setProgress(20);
 
 addEventListener('DOMContentLoaded', async () => {
+    injectDeployStatusUI();
+
     await initHealth();
+    Splash.setStatus('Checking deployment status...');
+    Splash.setProgress(30);
+    await initDeployStatus();
     Splash.setStatus('Loading services...');
     Splash.setProgress(45);
     await loadServices();
@@ -741,7 +839,8 @@ addEventListener('DOMContentLoaded', async () => {
     Splash.setProgress(80);
     await loadSsl();
     Splash.setStatus('Preparing interface...');
-    Splash.setProgress(95);
+    Splash.setProgress(90);
+    await initChadaDigitalStatus();
     await initForms();
     await initLogStream();
     await initRdsStatus();
