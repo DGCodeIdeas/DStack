@@ -168,14 +168,41 @@ fi
 set_current_phase "php-install"
 
 if ! check_phase_done "php-install"; then
-    log "Adding PHP PPA (ondrej/php)..."
-    if ! grep -q "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
-        add-apt-repository ppa:ondrej/php -y
-        apt-get update -qq
+    log "Setting up PHP repository (packages.sury.org)..."
+    # Remove legacy PPA if present
+    if grep -q "ondrej/php" /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; then
+        log "Removing legacy ondrej/php PPA..."
+        add-apt-repository --remove ppa:ondrej/php -y 2>/dev/null || true
     fi
+    # Add Sury GPG key and repository (required for Ubuntu 26.04+)
+    if [ ! -f /usr/share/keyrings/deb.sury.org-php.gpg ]; then
+        log "Adding Sury GPG key..."
+        curl -sSLo /usr/share/keyrings/deb.sury.org-php.gpg https://packages.sury.org/php/apt.gpg
+    fi
+    if [ ! -f /etc/apt/sources.list.d/sury-php.list ]; then
+        log "Adding Sury PHP repository..."
+        echo "deb [signed-by=/usr/share/keyrings/deb.sury.org-php.gpg] https://packages.sury.org/php/ $(lsb_release -sc) main" > /etc/apt/sources.list.d/sury-php.list
+    fi
+    apt-get update -qq
+    ok "PHP repository configured."
+
     log "Installing PHP ${PHP_VERSION} and extensions..."
-    apt-get install -y -qq php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-sqlite3 php${PHP_VERSION}-pdo php${PHP_VERSION}-pdo-sqlite php${PHP_VERSION}-xml php${PHP_VERSION}-mbstring php${PHP_VERSION}-curl php${PHP_VERSION}-zip php${PHP_VERSION}-bcmath php${PHP_VERSION}-intl php${PHP_VERSION}-gd php${PHP_VERSION}-redis php${PHP_VERSION}-tokenizer php${PHP_VERSION}-fileinfo
-    ok "PHP ${PHP_VERSION} installed."
+    if ! apt-get install -y -qq php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-sqlite3 php${PHP_VERSION}-pdo php${PHP_VERSION}-pdo-sqlite php${PHP_VERSION}-xml php${PHP_VERSION}-mbstring php${PHP_VERSION}-curl php${PHP_VERSION}-zip php${PHP_VERSION}-bcmath php${PHP_VERSION}-intl php${PHP_VERSION}-gd php${PHP_VERSION}-redis php${PHP_VERSION}-tokenizer php${PHP_VERSION}-fileinfo 2>/dev/null; then
+        warn "PHP ${PHP_VERSION} not found in Sury repo — detecting available version..."
+        # Detect available PHP version
+        AVAILABLE_PHP=$(apt-cache search '^php[0-9.]*-fpm$' 2>/dev/null | sort -V | tail -1 | cut -d' ' -f1 | sed 's/-fpm//')
+        if [ -n "${AVAILABLE_PHP}" ]; then
+            PHP_VERSION="${AVAILABLE_PHP}"
+            log "Using PHP version: ${PHP_VERSION}"
+            apt-get install -y -qq php${PHP_VERSION}-fpm php${PHP_VERSION}-cli php${PHP_VERSION}-mysql php${PHP_VERSION}-sqlite3 php${PHP_VERSION}-pdo php${PHP_VERSION}-pdo-sqlite php${PHP_VERSION}-xml php${PHP_VERSION}-mbstring php${PHP_VERSION}-curl php${PHP_VERSION}-zip php${PHP_VERSION}-bcmath php${PHP_VERSION}-intl php${PHP_VERSION}-gd php${PHP_VERSION}-redis php${PHP_VERSION}-tokenizer php${PHP_VERSION}-fileinfo
+            ok "PHP ${PHP_VERSION} installed (auto-detected)."
+        else
+            error "No PHP-FPM package found in any repository."
+            exit 1
+        fi
+    else
+        ok "PHP ${PHP_VERSION} installed."
+    fi
 
     PHP_FPM_SOCK="/var/run/php/php${PHP_VERSION}-fpm.sock"
     if ! sock_exists "${PHP_FPM_SOCK}"; then
