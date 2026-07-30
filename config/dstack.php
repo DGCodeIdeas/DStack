@@ -32,6 +32,8 @@ return [
 
     'backups_dir' => env('DSTACK_BACKUPS_DIR', '/opt/dstack-panel/backups'),
 
+    'deploy_status_file' => env('DSTACK_DEPLOY_STATUS_FILE', '/var/log/dstack-panel/deploy-status'),
+
     /*
     |--------------------------------------------------------------------------
     | Derived Paths

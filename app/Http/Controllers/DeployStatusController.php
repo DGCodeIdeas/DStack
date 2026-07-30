@@ -9,7 +9,7 @@ class DeployStatusController extends Controller
 {
     public function index(): JsonResponse
     {
-        $statusFile = base_path('.deploy-status');
+        $statusFile = config('dstack.deploy_status_file', '/var/log/dstack-panel/deploy-status');
 
         if (! File::exists($statusFile)) {
             return response()->json([

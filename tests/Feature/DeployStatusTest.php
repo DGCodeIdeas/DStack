@@ -6,13 +6,27 @@ use Tests\TestCase;
 
 class DeployStatusTest extends TestCase
 {
-    protected function getStatusFilePath(): string
+    protected string $statusFile;
+
+    protected function setUp(): void
     {
-        return base_path('.deploy-status');
+        parent::setUp();
+        $this->statusFile = tempnam(sys_get_temp_dir(), 'dstack_deploy_status_');
+        config(['dstack.deploy_status_file' => $this->statusFile]);
+    }
+
+    protected function tearDown(): void
+    {
+        if (file_exists($this->statusFile)) {
+            unlink($this->statusFile);
+        }
+        parent::tearDown();
     }
 
     public function test_deploy_status_endpoint_returns_404_when_file_missing(): void
     {
+        unlink($this->statusFile);
+
         $response = $this->getJson('/api/deploy-status');
 
         $response->assertStatus(404)
@@ -23,8 +37,7 @@ class DeployStatusTest extends TestCase
 
     public function test_deploy_status_endpoint_returns_complete_when_finished(): void
     {
-        $statusFile = $this->getStatusFilePath();
-        file_put_contents($statusFile, '{"phase":"complete","status":"done","finished_at":"2026-07-30T16:00:00Z"}');
+        file_put_contents($this->statusFile, '{"phase":"complete","status":"done","finished_at":"2026-07-30T16:00:00Z"}');
 
         $response = $this->getJson('/api/deploy-status');
 
@@ -33,14 +46,11 @@ class DeployStatusTest extends TestCase
                 'status' => 'complete',
                 'current_phase' => 'complete',
             ]);
-
-        unlink($statusFile);
     }
 
     public function test_deploy_status_endpoint_returns_in_progress_when_running(): void
     {
-        $statusFile = $this->getStatusFilePath();
-        file_put_contents($statusFile, '{"phase":"nginx-config","status":"in_progress","started_at":"2026-07-30T15:00:00Z"}');
+        file_put_contents($this->statusFile, '{"phase":"nginx-config","status":"in_progress","started_at":"2026-07-30T15:00:00Z"}');
 
         $response = $this->getJson('/api/deploy-status');
 
@@ -49,7 +59,5 @@ class DeployStatusTest extends TestCase
                 'status' => 'in_progress',
                 'current_phase' => 'nginx-config',
             ]);
-
-        unlink($statusFile);
     }
 }

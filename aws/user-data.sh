@@ -9,8 +9,8 @@
 #        sudo bash /tmp/user-data.sh
 #
 # Idempotent: safe to re-run. Progress tracked via:
-#   /opt/dstack-panel/.checkpoints  — phase completion log
-#   /opt/dstack-panel/.deploy-status — current phase (JSON, read by API)
+#   /var/log/dstack-panel/checkpoints — phase completion log (outside ROOT so it survives re-clone)
+#   /var/log/dstack-panel/deploy-status — current phase (JSON, read by API, survives re-clone)
 # -------------------------------------------------------------------------
 
 set -euo pipefail
@@ -44,13 +44,13 @@ PROJECTS_DIR="${ROOT}/projects"
 BACKUPS_DIR="${ROOT}/backups"
 DB_PATH="${ROOT}/storage/database/panel.db"
 REPO_URL="https://github.com/DGCodeIdeas/DStack.git"
-CHECKPOINT_FILE="${ROOT}/.checkpoints"
-DEPLOY_STATUS_FILE="${ROOT}/.deploy-status"
+CHECKPOINT_FILE="/var/log/dstack-panel/checkpoints"
+DEPLOY_STATUS_FILE="/var/log/dstack-panel/deploy-status"
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Ensure ROOT directory exists early for checkpoint/status files
-mkdir -p "${ROOT}"
+# Ensure directories exist for checkpoint/status files
+mkdir -p /var/log/dstack-panel "${ROOT}"
 
 # Colors for pretty output
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1 && [[ $(tput colors) -ge 8 ]]; then
@@ -74,7 +74,7 @@ die()    { error "$*"; exit 1; }
 record_checkpoint() {
     local level="$1" message="$2"
     local ts; ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    mkdir -p "${ROOT}" 2>/dev/null || true
+    mkdir -p "${ROOT}" "$(dirname "${CHECKPOINT_FILE}")" 2>/dev/null || true
     echo "${ts}|${level}|${CURRENT_PHASE:-unknown}|${message}" >> "${CHECKPOINT_FILE}"
     echo "{\"timestamp\":\"${ts}\",\"level\":\"${level}\",\"phase\":\"${CURRENT_PHASE:-unknown}\",\"message\":\"${message}\"}" > "${DEPLOY_STATUS_FILE}"
 }
@@ -289,8 +289,10 @@ if ! check_phase_done "app-deploy"; then
     chmod -R 775 "${ROOT}"
     if [ ! -d "${ROOT}/.git" ]; then
         if [ -d "${ROOT}" ] && [ -n "$(ls -A "${ROOT}" 2>/dev/null)" ]; then
-            log "Directory ${ROOT} exists but is not a git repo — removing for clean clone"
-            rm -rf "${ROOT}"
+            BACKUP_DIR="${ROOT}.backup.$(date +%Y%m%d%H%M%S)"
+            log "Directory ${ROOT} exists but is not a git repo — backing up to ${BACKUP_DIR}"
+            mv "${ROOT}" "${BACKUP_DIR}"
+            log "Backup complete: ${BACKUP_DIR}"
         fi
         log "Cloning repository: ${REPO_URL}"
         git clone "${REPO_URL}" "${ROOT}"
@@ -716,8 +718,10 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
 
         if [ ! -d "${CHADA_DIGITAL_ROOT}/.git" ]; then
             if [ -d "${CHADA_DIGITAL_ROOT}" ] && [ -n "$(ls -A "${CHADA_DIGITAL_ROOT}" 2>/dev/null)" ]; then
-                log "Directory ${CHADA_DIGITAL_ROOT} exists but is not a git repo — removing for clean clone"
-                rm -rf "${CHADA_DIGITAL_ROOT}"
+                CHADA_BACKUP_DIR="${CHADA_DIGITAL_ROOT}.backup.$(date +%Y%m%d%H%M%S)"
+                log "Directory ${CHADA_DIGITAL_ROOT} exists but is not a git repo — backing up to ${CHADA_BACKUP_DIR}"
+                mv "${CHADA_DIGITAL_ROOT}" "${CHADA_BACKUP_DIR}"
+                log "Backup complete: ${CHADA_BACKUP_DIR}"
             fi
             log "Cloning chada.digital repository: ${CHADA_DIGITAL_REPO}"
             git clone "${CHADA_DIGITAL_REPO}" "${CHADA_DIGITAL_ROOT}" 2>/dev/null || warn "Git clone failed for chada.digital"
