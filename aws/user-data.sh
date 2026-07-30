@@ -35,6 +35,9 @@ DEPLOY_STATUS_FILE="${ROOT}/.deploy-status"
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Ensure ROOT directory exists early for checkpoint/status files
+mkdir -p "${ROOT}"
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 log_info()  { echo -e "${GREEN}[INFO]${NC}  $*"; record_checkpoint "INFO" "$*"; }
@@ -44,6 +47,7 @@ log_error() { echo -e "${RED}[ERROR]${NC} $*"; record_checkpoint "ERROR" "$*"; }
 record_checkpoint() {
     local level="$1" message="$2"
     local ts; ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    mkdir -p "${ROOT}" 2>/dev/null || true
     echo "${ts}|${level}|${CURRENT_PHASE:-unknown}|${message}" >> "${CHECKPOINT_FILE}"
     echo "{\"timestamp\":\"${ts}\",\"level\":\"${level}\",\"phase\":\"${CURRENT_PHASE:-unknown}\",\"message\":\"${message}\"}" > "${DEPLOY_STATUS_FILE}"
 }
