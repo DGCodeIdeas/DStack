@@ -78,6 +78,10 @@ docker/data/*
 cloud/config.env
 !cloud/config.env.example
 
+# ===== Misc (doc exports, chat logs, downloads) =====
+misc/*
+!misc/Samples/
+
 # ===== Python =====
 /venv
 __pycache__/
