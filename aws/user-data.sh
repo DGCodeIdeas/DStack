@@ -27,6 +27,7 @@ PANEL_SUBDOMAIN="${PANEL_SUBDOMAIN:-panel.chadadigital.com}"
 APP_ENV="${APP_ENV:-production}"
 DB_CONNECTION="${DB_CONNECTION:-sqlite}"
 PHP_VERSION="${PHP_VERSION:-8.5}"
+PHP_FPM_SOCK="/var/run/php/php${PHP_VERSION}-fpm.sock"
 NGINX_PORT="${NGINX_PORT:-80}"
 SSL_PORT="${SSL_PORT:-443}"
 CHADA_DIGITAL_ENABLED="${CHADA_DIGITAL_ENABLED:-true}"
@@ -319,8 +320,8 @@ else
     log "Phase 6 already complete — pulling latest"
     git config --global --add safe.directory "${ROOT}" 2>/dev/null || true
     cd "${ROOT}"
-    git fetch origin --tags --quiet
-    git pull origin main --quiet || git pull origin master --quiet || true
+    git fetch origin --tags --quiet 2>/dev/null || true
+    git pull origin main --quiet 2>/dev/null || git pull origin master --quiet 2>/dev/null || true
     chown -R www-data:www-data "${ROOT}"
 fi
 
@@ -675,7 +676,7 @@ if ! check_phase_done "services-start"; then
     log "Starting application services..."
     if [ -f "${COMPOSE_FILE}" ]; then
         cd "${ROOT}"
-        sudo -u www-data docker compose up -d --remove-orphans 2>/dev/null || warn "Docker Compose stack start failed — check ${COMPOSE_FILE}"
+        COMPOSE_OUTPUT=$(sudo -u www-data docker compose up -d --remove-orphans 2>&1) || warn "Docker Compose stack start failed — check ${COMPOSE_FILE}: ${COMPOSE_OUTPUT}"
     fi
     ok "Services started."
     mark_phase_done "services-start"
@@ -739,8 +740,8 @@ if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
             log "Chada.digital repo already present — pulling latest"
             git config --global --add safe.directory "${CHADA_DIGITAL_ROOT}" 2>/dev/null || true
             cd "${CHADA_DIGITAL_ROOT}"
-            git fetch origin --tags --quiet
-            git pull origin "${CHADA_DIGITAL_BRANCH}" --quiet || true
+            git fetch origin --tags --quiet 2>/dev/null || true
+            git pull origin "${CHADA_DIGITAL_BRANCH}" --quiet 2>/dev/null || git pull origin master --quiet 2>/dev/null || git pull origin main --quiet 2>/dev/null || true
         fi
 
         if [ -d "${CHADA_DIGITAL_ROOT}" ]; then
