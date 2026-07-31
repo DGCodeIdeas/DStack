@@ -70,7 +70,19 @@ class RdsTunnelService
             ];
         }
 
-        $pid = (int) trim($pgrepProcess->getOutput());
+        // pgrep -f can return multiple PIDs (one per line). Take the first
+        // explicitly instead of letting (int) silently truncate a multi-line string.
+        $pids = array_values(array_filter(array_map('trim', explode("\n", $pgrepProcess->getOutput()))));
+        if (empty($pids)) {
+            return [
+                'success' => false,
+                'message' => 'Could not find tunnel PID after SSH connection',
+                'local_port' => $localPort,
+                'rds_host' => $rdsHost,
+                'rds_port' => $rdsPort,
+            ];
+        }
+        $pid = (int) $pids[0];
 
         $this->writePidFile($pid, $ec2Host, $ec2User, $rdsHost, $rdsPort, $localPort);
 
@@ -91,7 +103,12 @@ class RdsTunnelService
             return ['success' => true, 'message' => 'No active tunnel found'];
         }
 
-        $pid = $pidData['pid'];
+        $pid = $pidData['pid'] ?? null;
+        if ($pid === null || ! is_int($pid)) {
+            // Malformed / partial PID file — clean up and report success
+            $this->deletePidFile();
+            return ['success' => true, 'message' => 'No valid tunnel PID; cleaned up stale file'];
+        }
 
         if (posix_kill($pid, 0)) {
             posix_kill($pid, SIGTERM);
