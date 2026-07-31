@@ -409,8 +409,6 @@ pm.max_requests = 1000
 chdir = /opt/dstack-panel
 php_admin_value[error_log] = /opt/dstack-panel/storage/logs/php-fpm-error.log
 php_admin_flag[log_errors] = on
-env[APP_ENV] = production
-env[APP_DEBUG] = false
 FPM_POOL_EOF
 ok "PHP-FPM dstack pool configured."
 
