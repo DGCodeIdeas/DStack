@@ -280,7 +280,7 @@ else
     git config --global --add safe.directory "${ROOT}" 2>/dev/null || true
     cd "${ROOT}"
     git fetch origin --tags --quiet
-    git pull origin main --quiet || git pull origin master --quiet || true
+    git pull origin main --quiet 2>/dev/null || git pull origin master --quiet 2>/dev/null || true
 fi
 
 cd "${ROOT}"
@@ -641,7 +641,7 @@ log "=== Phase: Services Start ==="
 log "Starting application services..."
 if [ -f "${COMPOSE_FILE}" ]; then
     cd "${ROOT}"
-    COMPOSE_OUTPUT=$(sudo -u www-data docker compose up -d --remove-orphans 2>&1) || warn "Docker Compose stack start failed — check ${COMPOSE_FILE}: ${COMPOSE_OUTPUT}"
+    COMPOSE_OUTPUT=$(sudo -u www-data docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans 2>&1) || warn "Docker Compose stack start failed — check ${COMPOSE_FILE}: ${COMPOSE_OUTPUT}"
 fi
 ok "Services started."
 
