@@ -659,7 +659,7 @@ set_current_phase "cron-config"
 
 if ! check_phase_done "cron-config"; then
     log "Configuring Laravel scheduler cron..."
-    (crontab -u www-data -l 2>/dev/null | grep -v 'artisan schedule'; echo "* * * * * cd /opt/dstack-panel && php artisan schedule:run >> /opt/dstack-panel/storage/logs/scheduler.log 2>&1") | crontab -u www-data -
+    (crontab -u www-data -l 2>/dev/null | grep -v 'artisan schedule' || true; echo "* * * * * cd /opt/dstack-panel && php artisan schedule:run >> /opt/dstack-panel/storage/logs/scheduler.log 2>&1") | crontab -u www-data - 2>/dev/null || warn "Cron configuration may have failed"
     ok "Laravel scheduler cron configured for www-data user"
     mark_phase_done "cron-config"
 else
