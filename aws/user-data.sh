@@ -102,6 +102,82 @@ pkg_installed() { dpkg -l "$1" 2>/dev/null | grep -q "^ii"; }
 svc_active() { systemctl is-active --quiet "$1" 2>/dev/null; }
 sock_exists() { [ -S "$1" ]; }
 
+# ---------------------------------------------------------------------------
+# write_chada_vhost — emits the chada.digital nginx vhost.
+# HTTP-only when no TLS cert exists yet (lets nginx start + serve ACME);
+# full HTTP->HTTPS + TLS vhost once the cert is present.
+# Depends on: CHADA_DIGITAL_SUBDOMAIN, CHADA_DIGITAL_ROOT, NGINX_PORT,
+#             SSL_PORT, PHP_FPM_SOCK
+# ---------------------------------------------------------------------------
+write_chada_vhost() {
+    local conf="/etc/nginx/sites-available/${CHADA_DIGITAL_SUBDOMAIN}.conf"
+    local cert="/etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem"
+
+    if [ -f "${cert}" ]; then
+        cat > "${conf}" << CHADA_TLS_EOF
+server {
+    listen ${NGINX_PORT}; listen [::]:${NGINX_PORT};
+    server_name ${CHADA_DIGITAL_SUBDOMAIN} www.${CHADA_DIGITAL_SUBDOMAIN};
+    location /.well-known/acme-challenge/ { root /var/www/html; allow all; }
+    location / { return 301 https://\$host\$request_uri; }
+}
+server {
+    listen ${SSL_PORT} ssl; listen [::]:${SSL_PORT} ssl;
+    http2 on;
+    server_name ${CHADA_DIGITAL_SUBDOMAIN} www.${CHADA_DIGITAL_SUBDOMAIN};
+    root ${CHADA_DIGITAL_ROOT}/public; index index.php index.html;
+    client_max_body_size 64M;
+    ssl_certificate     /etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers on; ssl_session_cache shared:SSL:10m; ssl_session_timeout 1d;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
+    charset utf-8;
+    location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; access_log off; }
+    location /favicon.ico { access_log off; log_not_found off; }
+    location /robots.txt  { access_log off; log_not_found off; }
+    location /.well-known/acme-challenge/ { root /var/www/html; allow all; }
+    location / { try_files \$uri \$uri/ /index.php?\$query_string; }
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:${PHP_FPM_SOCK};
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        fastcgi_read_timeout 3600;
+    }
+    location ~ /\\. { deny all; access_log off; log_not_found off; }
+    location ~* \\.(env|git|svn|htaccess|md|yml|yaml)\$ { deny all; access_log off; log_not_found off; }
+}
+CHADA_TLS_EOF
+    else
+        cat > "${conf}" << CHADA_HTTP_EOF
+server {
+    listen ${NGINX_PORT}; listen [::]:${NGINX_PORT};
+    server_name ${CHADA_DIGITAL_SUBDOMAIN} www.${CHADA_DIGITAL_SUBDOMAIN};
+    root ${CHADA_DIGITAL_ROOT}/public; index index.php index.html;
+    client_max_body_size 64M;
+    charset utf-8;
+    location /.well-known/acme-challenge/ { root /var/www/html; allow all; }
+    location / { try_files \$uri \$uri/ /index.php?\$query_string; }
+    location ~ \.php\$ {
+        include snippets/fastcgi-php.conf;
+        fastcgi_pass unix:${PHP_FPM_SOCK};
+        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
+        fastcgi_read_timeout 3600;
+    }
+    location ~ /\\. { deny all; access_log off; log_not_found off; }
+    location ~* \\.(env|git|svn|htaccess|md|yml|yaml)\$ { deny all; access_log off; log_not_found off; }
+}
+CHADA_HTTP_EOF
+    fi
+
+    ln -sf "${conf}" "/etc/nginx/sites-enabled/${CHADA_DIGITAL_SUBDOMAIN}.conf"
+}
+
 # ===========================================================================
 # Preflight: OS check
 # ===========================================================================
@@ -889,64 +965,46 @@ if [ "${DB_CONNECTION}" = "sqlite" ]; then
     sudo -u www-data env HOME="${CHADA_DIGITAL_ROOT}" php "${CHADA_DIGITAL_ROOT}/artisan" migrate --force 2>/dev/null || warn "Chada.digital migrations may have failed"
 fi
 
-        CHADA_NGINX_CONF="/etc/nginx/sites-available/${CHADA_DIGITAL_SUBDOMAIN}.conf"
-        cat > "${CHADA_NGINX_CONF}" << CHADA_NGINX_EOF
-server {
-    listen ${NGINX_PORT}; listen [::]:${NGINX_PORT};
-    server_name ${CHADA_DIGITAL_SUBDOMAIN}; return 301 https://\$host\$request_uri;
-}
-server {
-    listen ${SSL_PORT} ssl http2; listen [::]:${SSL_PORT} ssl http2;
-    server_name ${CHADA_DIGITAL_SUBDOMAIN};
-    root ${CHADA_DIGITAL_ROOT}/public; index index.php index.html;
-    client_max_body_size 64M;
-    ssl_certificate     /etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/privkey.pem;
-    ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
-    ssl_prefer_server_ciphers on; ssl_session_cache shared:SSL:10m; ssl_session_timeout 1d;
-    add_header X-Frame-Options "SAMEORIGIN" always;
-    add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
-    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
-    charset utf-8;
-    location /assets/ { expires 1y; add_header Cache-Control "public, immutable"; access_log off; }
-    location /favicon.ico { access_log off; log_not_found off; }
-    location /robots.txt  { access_log off; log_not_found off; }
-    location /well-known  { root /var/www/html; allow all; }
-    location / { try_files \$uri \$uri/ /index.php?\$query_string; }
-    location ~ \.php\$ {
-        include snippets/fastcgi-php.conf;
-        fastcgi_pass unix:${PHP_FPM_SOCK};
-        fastcgi_param SCRIPT_FILENAME \$realpath_root\$fastcgi_script_name;
-        fastcgi_read_timeout 3600;
-    }
-    location ~ /\\. { deny all; access_log off; log_not_found off; }
-    location ~* \\.(env|git|svn|htaccess|md|yml|yaml)$ { deny all; access_log off; log_not_found off; }
-}
-CHADA_NGINX_EOF
-        ln -sf "${CHADA_NGINX_CONF}" "/etc/nginx/sites-enabled/${CHADA_DIGITAL_SUBDOMAIN}.conf"
-        if nginx -t 2>/dev/null; then
-            systemctl reload nginx 2>/dev/null || true
-            ok "Chada.digital nginx vhost configured for ${CHADA_DIGITAL_SUBDOMAIN}"
-        else
-            warn "Chada.digital nginx config test failed — will retry after SSL is obtained"
-        fi
+mkdir -p /var/www/html/.well-known/acme-challenge
 
-        if [ -f "/etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem" ]; then
-            ok "Chada.digital SSL certificate already exists."
-        else
-            if certbot certonly --nginx --non-interactive --agree-tos --email "admin@${CHADA_DIGITAL_SUBDOMAIN}" -d "${CHADA_DIGITAL_SUBDOMAIN}" --rsa-key-size 4096 --force-renewal 2>/dev/null; then
-                log "SSL certificate obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
-                systemctl reload nginx 2>/dev/null || true
-                ok "Chada.digital SSL certificate ready."
-            else
-                warn "SSL certificate could not be obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
-            fi
-        fi
+# 1) Write vhost (HTTP-only if no cert yet) and bring nginx up.
+write_chada_vhost
+if nginx -t 2>/dev/null; then
+    systemctl enable --now nginx 2>/dev/null || systemctl reload nginx 2>/dev/null || systemctl restart nginx 2>/dev/null || true
+    ok "Chada.digital nginx vhost active (HTTP) for ${CHADA_DIGITAL_SUBDOMAIN}"
+else
+    warn "Chada.digital nginx config test failed — check /etc/nginx/sites-available/${CHADA_DIGITAL_SUBDOMAIN}.conf"
+fi
 
-        ok "Chada.digital app deployment complete"
+# 2) Obtain cert via webroot (no --nginx dependency → no chicken-and-egg).
+if [ -f "/etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem" ]; then
+    ok "Chada.digital SSL certificate already exists."
+    SSL_CERT_READY=true
+else
+    if certbot certonly --webroot -w /var/www/html \
+         --non-interactive --agree-tos --email "admin@${CHADA_DIGITAL_SUBDOMAIN}" \
+         -d "${CHADA_DIGITAL_SUBDOMAIN}" -d "www.${CHADA_DIGITAL_SUBDOMAIN}" \
+         --rsa-key-size 4096 2>/dev/null; then
+        log "SSL certificate obtained for ${CHADA_DIGITAL_SUBDOMAIN}"
+        SSL_CERT_READY=true
+    else
+        warn "SSL certificate could not be obtained for ${CHADA_DIGITAL_SUBDOMAIN} (DNS must resolve to this instance first)"
+        SSL_CERT_READY=false
+    fi
+fi
+
+# 3) If a cert now exists, rewrite vhost as full TLS and reload — single-run activation.
+if [ -f "/etc/letsencrypt/live/${CHADA_DIGITAL_SUBDOMAIN}/fullchain.pem" ]; then
+    write_chada_vhost
+    if nginx -t 2>/dev/null; then
+        systemctl reload nginx 2>/dev/null || true
+        ok "Chada.digital HTTPS active for ${CHADA_DIGITAL_SUBDOMAIN}"
+    else
+        warn "TLS vhost failed nginx -t — cert exists but config invalid; check the vhost"
+    fi
+fi
+
+ok "Chada.digital app deployment complete"
     else
         warn "Chada.digital repo not available — skipping deployment"
     fi
@@ -973,10 +1031,18 @@ log "  Docker Compose stack: $(sudo -u www-data env DOCKER_CONFIG="${DOCKER_CONF
 log "  Chada.digital URL: https://${CHADA_DIGITAL_SUBDOMAIN}"
 log ""
 log " Next steps:"
-log "  1. Update DNS ${PANEL_SUBDOMAIN} → this instance's public IP"
-if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
-    log "  2. Update DNS ${CHADA_DIGITAL_SUBDOMAIN} → this instance's public IP"
+NEXT_STEP=1
+if [ "${PANEL_WEB_ENABLED}" = "true" ]; then
+    log "  ${NEXT_STEP}. Update DNS ${PANEL_SUBDOMAIN} → this instance's public IP"; NEXT_STEP=$((NEXT_STEP+1))
 fi
-log "  3. If SSL failed, run: certbot certonly --nginx -d ${PANEL_SUBDOMAIN}"
-log "  4. Check logs: tail -f ${ROOT}/storage/logs/laravel.log"
+if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
+    log "  ${NEXT_STEP}. Update DNS ${CHADA_DIGITAL_SUBDOMAIN} (+ www) → this instance's public IP"; NEXT_STEP=$((NEXT_STEP+1))
+fi
+if [ "${PANEL_WEB_ENABLED}" = "true" ]; then
+    log "  ${NEXT_STEP}. If panel SSL failed: certbot certonly --webroot -w /var/www/html -d ${PANEL_SUBDOMAIN}"; NEXT_STEP=$((NEXT_STEP+1))
+fi
+if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
+    log "  ${NEXT_STEP}. If chada SSL failed: certbot certonly --webroot -w /var/www/html -d ${CHADA_DIGITAL_SUBDOMAIN} -d www.${CHADA_DIGITAL_SUBDOMAIN}"; NEXT_STEP=$((NEXT_STEP+1))
+fi
+log "  ${NEXT_STEP}. Check logs: tail -f ${ROOT}/storage/logs/laravel.log"
 log "========================================="
