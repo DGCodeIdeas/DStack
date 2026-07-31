@@ -757,6 +757,27 @@ systemctl enable --now fail2ban || true
 ok "Fail2ban enabled with SSH brute-force protection (3 attempts / 1 hour ban)"
 
 # ===========================================================================
+# Phase 17a: Sudoers for CI Deploy (scoped, no blanket sudo)
+# ===========================================================================
+echo
+log "=== Phase: Sudoers for CI Deploy ==="
+
+log "Installing scoped sudoers for chada.digital CI deploy..."
+cat > /etc/sudoers.d/chada-deploy << CHADA_SUDOERS_EOF
+# Scoped sudo for CI post-deploy script (scripts/post-deploy-dstack.sh).
+# No blanket NOPASSWD — only the specific commands CI needs.
+ubuntu ALL=(www-data) NOPASSWD: /usr/bin/php
+ubuntu ALL=(root) NOPASSWD: /usr/bin/chown, /usr/sbin/chown, /usr/sbin/nginx, /bin/systemctl reload nginx, /bin/chown
+CHADA_SUDOERS_EOF
+chmod 440 /etc/sudoers.d/chada-deploy
+chown root:root /etc/sudoers.d/chada-deploy
+if visudo -c 2>/dev/null; then
+    ok "Scoped sudoers installed for CI deploy (chada-deploy)."
+else
+    warn "sudoers syntax check failed — CI deploy may be unable to run artisan/chown. Fix manually."
+fi
+
+# ===========================================================================
 # Phase 17: Log Rotation
 # ===========================================================================
 echo
@@ -1029,6 +1050,7 @@ log "  Database: ${DB_CONNECTION}"
 log "  SSL ready: ${SSL_CERT_READY:-false}"
 log "  Docker Compose stack: $(sudo -u www-data env DOCKER_CONFIG="${DOCKER_CONFIG_DIR}" docker compose --env-file "${DOCKER_ENV_FILE}" -f "${COMPOSE_FILE}" -f "${COMPOSE_OVERRIDE}" ps --status running -q 2>/dev/null | wc -l) running"
 log "  Chada.digital URL: https://${CHADA_DIGITAL_SUBDOMAIN}"
+log "  Assets: compiled by CI (bun run prod), not on this host"
 log ""
 log " Next steps:"
 NEXT_STEP=1
@@ -1037,6 +1059,8 @@ if [ "${PANEL_WEB_ENABLED}" = "true" ]; then
 fi
 if [ "${CHADA_DIGITAL_ENABLED}" = "true" ]; then
     log "  ${NEXT_STEP}. Update DNS ${CHADA_DIGITAL_SUBDOMAIN} (+ www) → this instance's public IP"; NEXT_STEP=$((NEXT_STEP+1))
+    log "  ${NEXT_STEP}. Trigger the chada.digital 'Deploy' GitHub Actions workflow (workflow_dispatch) to compile assets + deploy"
+    NEXT_STEP=$((NEXT_STEP+1))
 fi
 if [ "${PANEL_WEB_ENABLED}" = "true" ]; then
     log "  ${NEXT_STEP}. If panel SSL failed: certbot certonly --webroot -w /var/www/html -d ${PANEL_SUBDOMAIN}"; NEXT_STEP=$((NEXT_STEP+1))
