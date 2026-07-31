@@ -10,6 +10,11 @@
 #
 # Idempotent: safe to re-run. Each step checks current system state
 # and acts accordingly — no checkpoint files, no phase-tracking state.
+# Key improvements:
+#   - PHP-FPM config validated (php-fpm -t) before any restart
+#   - PHP-FPM log permissions fixed automatically
+#   - Post-restart verification that services are actually running
+#   - Recovery logic for common failure modes (log permissions, config errors)
 # -------------------------------------------------------------------------
 
 set -euo pipefail
@@ -370,36 +375,21 @@ else
 fi
 
 # ===========================================================================
-# Phase 12: PHP-FPM Tuning for 2 GB RAM (t3.small)
+# Phase 12: PHP-FPM Tune + Pool Setup for 2 GB RAM (t3.small)
 # ===========================================================================
 echo
 log "=== Phase: PHP-FPM Tune ==="
 
 log "Tuning PHP-FPM for 2 GB RAM..."
 FPM_CONF="/etc/php/${PHP_VERSION}/fpm/pool.d/www.conf"
-if [ -f "${FPM_CONF}" ]; then
-    sed -i 's/^pm = .*/pm = dynamic/' "${FPM_CONF}"
-    sed -i 's/^pm.max_children = .*/pm.max_children = 6/' "${FPM_CONF}"
-    sed -i 's/^pm.start_servers = .*/pm.start_servers = 3/' "${FPM_CONF}"
-    sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 2/' "${FPM_CONF}"
-    sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 4/' "${FPM_CONF}"
-    sed -i 's/^pm.max_requests = .*/pm.max_requests = 1000/' "${FPM_CONF}"
-    systemctl restart "php${PHP_VERSION}-fpm"
-    ok "PHP-FPM tuned: pm=dynamic, max_children=6"
-else
-    warn "PHP-FPM config not found at ${FPM_CONF} — skipping tuning"
+
+# Fix log file permissions so www-data can write to it
+if [ -f /var/log/php${PHP_VERSION}-fpm.log ]; then
+    chown www-data:www-data /var/log/php${PHP_VERSION}-fpm.log 2>/dev/null || true
+    chmod 664 /var/log/php${PHP_VERSION}-fpm.log 2>/dev/null || true
 fi
 
-# ===========================================================================
-# Phase 13: Nginx + PHP-FPM (Direct PHP Serving)
-# ===========================================================================
-echo
-log "=== Phase: Nginx Config ==="
-
-log "Configuring nginx + PHP-FPM (direct serving)..."
-rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-rm -f /etc/nginx/conf.d/upstreams.conf 2>/dev/null || true
-
+# Create dstack pool configuration alongside www pool
 FPM_POOL_CONF="/etc/php/${PHP_VERSION}/fpm/pool.d/dstack.conf"
 mkdir -p /etc/php/${PHP_VERSION}/fpm/pool.d
 cat > "${FPM_POOL_CONF}" << FPM_POOL_EOF
@@ -422,7 +412,63 @@ php_admin_flag[log_errors] = on
 env[APP_ENV] = production
 env[APP_DEBUG] = false
 FPM_POOL_EOF
-sed -i 's/^pm = .*/pm = off/' /etc/php/${PHP_VERSION}/fpm/pool.d/www.conf 2>/dev/null || true
+ok "PHP-FPM dstack pool configured."
+
+# Tune www.conf parameters (idempotent — sed with no match is harmless)
+if [ -f "${FPM_CONF}" ]; then
+    sed -i 's/^pm = .*/pm = dynamic/' "${FPM_CONF}"
+    sed -i 's/^pm.max_children = .*/pm.max_children = 6/' "${FPM_CONF}"
+    sed -i 's/^pm.start_servers = .*/pm.start_servers = 3/' "${FPM_CONF}"
+    sed -i 's/^pm.min_spare_servers = .*/pm.min_spare_servers = 2/' "${FPM_CONF}"
+    sed -i 's/^pm.max_spare_servers = .*/pm.max_spare_servers = 4/' "${FPM_CONF}"
+    sed -i 's/^pm.max_requests = .*/pm.max_requests = 1000/' "${FPM_CONF}"
+else
+    warn "PHP-FPM www.conf not found at ${FPM_CONF} — skipping"
+fi
+
+# Validate configuration before restarting
+log "Validating PHP-FPM configuration..."
+if ! php-fpm${PHP_VERSION} -t 2>&1 | tee -a "${LOG_FILE}"; then
+    error "PHP-FPM configuration test failed — will not restart until fixed"
+    warn "Check ${LOG_FILE} for details"
+    FPM_TUNE_OK=false
+else
+    FPM_TUNE_OK=true
+fi
+
+if [ "${FPM_TUNE_OK}" = true ]; then
+    log "Restarting PHP-FPM..."
+    systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
+    sleep 2
+    if pgrep -x "php-fpm${PHP_VERSION}" > /dev/null; then
+        ok "PHP-FPM ${PHP_VERSION} is running (pm=dynamic, max_children=6)"
+    else
+        error "PHP-FPM ${PHP_VERSION} is not running after restart"
+        warn "Attempting recovery..."
+        log "Re-validating PHP-FPM configuration..."
+        if php-fpm${PHP_VERSION} -t 2>&1 | tee -a "${LOG_FILE}"; then
+            systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
+            sleep 2
+            if pgrep -x "php-fpm${PHP_VERSION}" > /dev/null; then
+                ok "PHP-FPM ${PHP_VERSION} recovered after re-restart"
+            else
+                warn "PHP-FPM ${PHP_VERSION} still not running — check journalctl -xeu php${PHP_VERSION}-fpm.service"
+            fi
+        else
+            error "PHP-FPM config is invalid — cannot start without fixing configuration"
+        fi
+    fi
+fi
+
+# ===========================================================================
+# Phase 13: Nginx + PHP-FPM (Direct PHP Serving)
+# ===========================================================================
+echo
+log "=== Phase: Nginx Config ==="
+
+log "Configuring nginx + PHP-FPM (direct serving)..."
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+rm -f /etc/nginx/conf.d/upstreams.conf 2>/dev/null || true
 
 NGINX_CONF="/etc/nginx/sites-available/${PANEL_SUBDOMAIN}.conf"
 mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
@@ -612,8 +658,20 @@ sleep 3
 if pgrep -x "php-fpm${PHP_VERSION}" > /dev/null; then
     ok "PHP-FPM ${PHP_VERSION}: running"
 else
-    warn "PHP-FPM ${PHP_VERSION}: not running — attempting restart"
-    systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
+    warn "PHP-FPM ${PHP_VERSION}: not running — attempting recovery"
+    if [ -f /var/log/php${PHP_VERSION}-fpm.log ]; then
+        chown www-data:www-data /var/log/php${PHP_VERSION}-fpm.log 2>/dev/null || true
+        chmod 664 /var/log/php${PHP_VERSION}-fpm.log 2>/dev/null || true
+    fi
+    if php-fpm${PHP_VERSION} -t 2>/dev/null; then
+        systemctl restart "php${PHP_VERSION}-fpm" 2>/dev/null || true
+        sleep 2
+    fi
+    if pgrep -x "php-fpm${PHP_VERSION}" > /dev/null; then
+        ok "PHP-FPM ${PHP_VERSION}: recovered successfully"
+    else
+        warn "PHP-FPM ${PHP_VERSION}: failed to recover — check journalctl -xeu php${PHP_VERSION}-fpm.service"
+    fi
 fi
 
 if systemctl is-active --quiet nginx; then
